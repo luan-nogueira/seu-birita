@@ -1,0 +1,238 @@
+@import "tailwindcss";
+
+/* O tema é sempre resolvido pra "claro" ou "escuro" no data-tema do <html>
+   (o script no <head> faz isso antes da primeira pintura), então o `dark:`
+   segue esse atributo em vez do prefers-color-scheme. */
+@custom-variant dark (&:where([data-tema="escuro"], [data-tema="escuro"] *));
+
+/* ---------------------------------------------------------------------------
+   Paleta Dark Premium — Seu Birita
+   Base: preto profundo com tons de carvão/grafite
+   Acento: dourado âmbar premium (#F0A500 → #FFD166)
+   --------------------------------------------------------------------------- */
+@theme {
+  /* Escala de cinzas/preto premium */
+  --color-ink-50:  #f7f7f8;
+  --color-ink-100: #ededf0;
+  --color-ink-200: #d3d3db;
+  --color-ink-300: #a9a9ba;
+  --color-ink-400: #737389;
+  --color-ink-500: #52526a;
+  --color-ink-600: #3a3a52;
+  --color-ink-700: #252538;
+  --color-ink-800: #16162a;
+  --color-ink-900: #0d0d1f;
+  --color-ink-950: #07070f;
+
+  /* Dourado âmbar premium */
+  --color-ouro-50:  #fffbeb;
+  --color-ouro-100: #fef3c7;
+  --color-ouro-200: #fde68a;
+  --color-ouro-300: #fcd34d;
+  --color-ouro-400: #fbbf24;
+  --color-ouro-500: #f59e0b;
+  --color-ouro-600: #d97706;
+  --color-ouro-700: #b45309;
+  --color-ouro-800: #92400e;
+  --color-ouro-900: #78350f;
+
+  /* Mantém para compatibilidade com componentes antigos */
+  --color-marrom-50:  #fbf6ee;
+  --color-marrom-100: #f3e4ce;
+  --color-marrom-200: #e3c9a6;
+  --color-marrom-300: #c9a277;
+  --color-marrom-400: #a2714a;
+  --color-marrom-500: #7e4e2d;
+  --color-marrom-600: #653a20;
+  --color-marrom-700: #4e2916;
+  --color-marrom-800: #3b1b0e;
+  --color-marrom-900: #2a1108;
+  --color-marrom-950: #180903;
+
+  --color-creme:  #fde68a;
+  --color-laranja: #f97316;
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+}
+
+/* --- Tokens semânticos: tema claro (refinado) ----------------------------- */
+:root {
+  --fundo:       #f5f5f7;
+  --superficie:  #ffffff;
+  --superficie-2:#f0f0f5;
+  --borda:       #e2e2ea;
+  --borda-forte: #c8c8d8;
+  --texto:       #0d0d1f;
+  --texto-suave: #52526a;
+  --acento:      #d97706;
+  --acento-texto:#ffffff;
+  --barra:       #0d0d1f;
+  --barra-texto: #fde68a;
+}
+
+/* --- Tokens semânticos: tema escuro (Dark Premium) ----------------------- */
+:root[data-tema="escuro"] {
+  --fundo:       #07070f;
+  --superficie:  #0f0f1e;
+  --superficie-2:#16162a;
+  --borda:       #252538;
+  --borda-forte: #3a3a52;
+  --texto:       #f0f0fa;
+  --texto-suave: #a9a9ba;
+  --acento:      #f59e0b;
+  --acento-texto:#07070f;
+  --barra:       #0f0f1e;
+  --barra-texto: #fde68a;
+}
+
+/* Antes do script rodar (ou com JS desligado), segue a preferência do SO. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema]) {
+    --fundo:       #07070f;
+    --superficie:  #0f0f1e;
+    --superficie-2:#16162a;
+    --borda:       #252538;
+    --borda-forte: #3a3a52;
+    --texto:       #f0f0fa;
+    --texto-suave: #a9a9ba;
+    --acento:      #f59e0b;
+    --acento-texto:#07070f;
+    --barra:       #0f0f1e;
+    --barra-texto: #fde68a;
+  }
+}
+
+/* `inline` faz as utilitárias apontarem para a variável, e não copiarem
+   o valor — é o que deixa a troca de tema funcionar em tempo real. */
+@theme inline {
+  --color-fundo:       var(--fundo);
+  --color-superficie:  var(--superficie);
+  --color-superficie-2:var(--superficie-2);
+  --color-borda:       var(--borda);
+  --color-borda-forte: var(--borda-forte);
+  --color-texto:       var(--texto);
+  --color-texto-suave: var(--texto-suave);
+  --color-acento:      var(--acento);
+  --color-acento-texto:var(--acento-texto);
+  --color-barra:       var(--barra);
+  --color-barra-texto: var(--barra-texto);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--fundo);
+    color: var(--texto);
+    font-family: var(--font-sans);
+    /* Respeita a área segura do iPhone (notch e barra inferior). */
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+
+  /* Some com as setinhas de <input type="number"> */
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  ::selection {
+    background: var(--color-ouro-400);
+    color: var(--color-ink-950);
+  }
+}
+
+/* Definidos como @utility (e não em @layer components) porque no Tailwind v4
+   só uma utilitária pode ser usada dentro de @apply. */
+@utility card {
+  @apply rounded-2xl border border-borda bg-superficie;
+}
+
+@utility rotulo {
+  @apply mb-1.5 block text-xs font-semibold tracking-wide text-texto-suave uppercase;
+}
+
+@utility campo {
+  @apply w-full rounded-xl border border-borda bg-superficie px-3 py-2.5
+         text-texto outline-none transition
+         placeholder:text-texto-suave/60
+         focus:border-acento focus:ring-2 focus:ring-acento/25;
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5
+         text-sm font-semibold transition active:scale-[.98]
+         disabled:pointer-events-none disabled:opacity-50;
+}
+
+@utility btn-primario {
+  @apply btn bg-acento text-acento-texto hover:brightness-110 shadow-sm shadow-acento/20;
+}
+
+@utility btn-secundario {
+  @apply btn border border-borda-forte bg-superficie text-texto
+         hover:bg-superficie-2;
+}
+
+@utility btn-fantasma {
+  @apply btn text-texto-suave hover:bg-superficie-2 hover:text-texto;
+}
+
+@utility btn-perigo {
+  @apply btn border border-red-300 text-red-700
+         hover:bg-red-50 dark:border-red-900 dark:text-red-400
+         dark:hover:bg-red-950/40;
+}
+
+@utility chip {
+  @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1
+         text-xs font-semibold;
+}
+
+/* ---------------------------------------------------------------------------
+   Impressão — usada pelo relatório do cliente.
+   --------------------------------------------------------------------------- */
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm 10mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .nao-imprimir {
+    display: none !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  tr,
+  .evitar-quebra {
+    break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+}

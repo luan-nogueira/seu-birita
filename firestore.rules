@@ -1,0 +1,43 @@
+rules_version = '2';
+
+// Regras da Seu Birita Distribuidora.
+//
+// Princípio: só a equipe logada mexe nos dados. A única exceção é a leitura
+// dos produtos, porque a tabela de preços pública (/catalogo) é aberta —
+// é o link que vai pro cliente no lugar do kyte.site.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function logado() {
+      return request.auth != null;
+    }
+
+    // Catálogo público: qualquer um lê, só a equipe escreve.
+    match /produtos/{doc} {
+      allow read: if true;
+      allow write: if logado();
+    }
+
+    // Dados do negócio: clientes, fornecedores, pedidos, pagamentos,
+    // movimentos de estoque. Nada disso é público.
+    match /clientes/{doc}     { allow read, write: if logado(); }
+    match /fornecedores/{doc} { allow read, write: if logado(); }
+    match /pedidos/{doc}      { allow read, write: if logado(); }
+    match /pagamentos/{doc}   { allow read, write: if logado(); }
+    match /movimentos/{doc}   { allow read, write: if logado(); }
+
+    // Pedidos feitos pelo cliente na página pública (/pedido).
+    // Qualquer um pode criar (anônimo) — é o fluxo normal de pedido público.
+    // Apenas a equipe logada pode ler, atualizar ou deletar.
+    match /pedidosClientes/{doc} {
+      allow create: if true;
+      allow read, update, delete: if logado();
+    }
+
+    // Nada além do que está declarado acima.
+    match /{documento=**} {
+      allow read, write: if false;
+    }
+  }
+}
