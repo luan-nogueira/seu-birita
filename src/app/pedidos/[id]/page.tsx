@@ -1236,28 +1236,7 @@ function RegistrarPagamento({
         </div>
       </Modal>
 
-      <Modal
-        aberto={modalExcluirAberto}
-        aoFechar={() => setModalExcluirAberto(false)}
-        titulo="Excluir Pedido"
-        rodape={
-          <>
-            <button
-              className="btn-secundario"
-              onClick={() => setModalExcluirAberto(false)}
-            >
-              Cancelar
-            </button>
-            <button className="btn-perigo" onClick={confirmarExclusaoPedido}>
-              Excluir
-            </button>
-          </>
-        }
-      >
-        <p className="text-sm text-texto-suave">
-          Tem certeza que deseja excluir o pedido <strong>#{pedido?.numero}</strong>? Esta ação não pode ser desfeita.
-        </p>
-      </Modal>
+
     </>
   );
 }
