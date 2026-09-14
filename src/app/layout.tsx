@@ -44,7 +44,7 @@ export default function RootLayout({
         <Script id="tema-script" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: SCRIPT_TEMA }} />
         <AuthProvider>
           <DadosProvider>
-            <AppShell>{children}</AppShell>
+            {children}
           </DadosProvider>
         </AuthProvider>
       </body>

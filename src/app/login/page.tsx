@@ -24,7 +24,7 @@ export default function LoginPage() {
     setEnviando(true);
     try {
       await entrar(email, senha);
-      router.replace("/");
+      router.replace("/admin");
     } catch (erro) {
       setErro(mensagemDeErro(erro));
       setEnviando(false);

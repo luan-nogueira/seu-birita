@@ -1,223 +1,233 @@
 "use client";
 
+import { useMemo, useState } from "react";
+import { MessageCircle, Search, ShoppingBag } from "lucide-react";
 import Link from "next/link";
-import {
-  AlertTriangle,
-  ArrowRight,
-  ClipboardList,
-  Package,
-  Plus,
-  TrendingUp,
-  Users,
-  Wallet,
-} from "lucide-react";
-import { Cabecalho, StatusChip } from "@/components/ui";
+import { Logo } from "@/components/Logo";
+import { TemaBotao } from "@/components/TemaBotao";
 import { useDados } from "@/lib/store";
-import { calcularTotais } from "@/lib/calc";
-import { brl, dataBR } from "@/lib/format";
+import { brl, normalizar } from "@/lib/format";
+import { EMPRESA } from "@/lib/empresa";
 
-export default function InicioPage() {
-  const { pedidos, produtos, clientes, carregando } = useDados();
+/**
+ * Tabela de preços pública — link que o Luifer manda pro cliente.
+ * Agora com botão de pedido online apontando para /pedido.
+ */
+export default function CatalogoPage() {
+  const { produtos, carregando } = useDados();
+  const [busca, setBusca] = useState("");
+  const [categoriaAtiva, setCategoriaAtiva] = useState<string | null>(null);
 
-  const ativos = pedidos.filter((p) => p.status !== "CANCELADO");
+  const visiveis = useMemo(() => {
+    const termo = normalizar(busca);
+    return produtos
+      .filter((p) => p.ativo && p.visivelCatalogo && p.precoUn > 0)
+      .filter(
+        (p) =>
+          !termo ||
+          normalizar(p.nome).includes(termo) ||
+          normalizar(p.categoria).includes(termo),
+      );
+  }, [produtos, busca]);
 
-  const aReceber = ativos
-    .filter((p) => p.status !== "RASCUNHO")
-    .reduce((soma, p) => soma + Math.max(0, calcularTotais(p).saldoAberto), 0);
+  const categorias = useMemo(() => {
+    const set = new Set(visiveis.map((p) => p.categoria || "Outros"));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [visiveis]);
 
-  const mesAtual = new Date().toISOString().slice(0, 7);
-  const faturadoMes = ativos
-    .filter((p) => p.dataEvento.startsWith(mesAtual))
-    .reduce((soma, p) => soma + calcularTotais(p).valorFinal, 0);
+  const porCategoria = useMemo(() => {
+    const filtrados = categoriaAtiva
+      ? visiveis.filter((p) => (p.categoria || "Outros") === categoriaAtiva)
+      : visiveis;
+    const mapa = new Map<string, typeof filtrados>();
+    for (const p of filtrados) {
+      const chave = p.categoria || "Outros";
+      if (!mapa.has(chave)) mapa.set(chave, []);
+      mapa.get(chave)!.push(p);
+    }
+    return Array.from(mapa.entries()).sort(([a], [b]) =>
+      a.localeCompare(b, "pt-BR"),
+    );
+  }, [visiveis, categoriaAtiva]);
 
-  const emAberto = ativos.filter(
-    (p) =>
-      p.status !== "RASCUNHO" && calcularTotais(p).saldoAberto > 0.005,
-  );
-
-  const recentes = ativos.slice(0, 5);
+  const whatsapp = EMPRESA.telefone.replace(/\D/g, "");
 
   return (
-    <>
-      <Cabecalho
-        titulo="Início"
-        subtitulo={
-          carregando
-            ? "Carregando…"
-            : `${clientes.length} clientes · ${produtos.length} produtos`
-        }
-        acao={
-          <Link href="/pedidos" className="btn-primario">
-            <Plus className="h-4 w-4" />
-            Novo pedido
-          </Link>
-        }
-      />
-
-      <div className="space-y-6 px-4 md:px-6">
-        {/* --------------------------- Números --------------------------- */}
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          <Cartao
-            Icone={Wallet}
-            rotulo="A receber"
-            valor={brl(aReceber)}
-            detalhe={`${emAberto.length} pedido(s) em aberto`}
-            destaque={aReceber > 0}
-          />
-          <Cartao
-            Icone={TrendingUp}
-            rotulo="Faturado no mês"
-            valor={brl(faturadoMes)}
-            detalhe={new Date().toLocaleDateString("pt-BR", {
+    <div className="min-h-dvh bg-fundo">
+      {/* ─── Header ─── */}
+      <header className="bg-barra px-5 py-10 text-center text-barra-texto">
+        <div className="mx-auto flex max-w-3xl flex-col items-center">
+          <Logo className="h-28 w-auto" variante="clara" />
+          <p className="mt-3 text-sm font-semibold text-creme/80">
+            Tabela de preços
+          </p>
+          <p className="mt-1 text-xs text-creme/60">
+            Atualizada em{" "}
+            {new Date().toLocaleDateString("pt-BR", {
+              day: "2-digit",
               month: "long",
               year: "numeric",
             })}
-          />
-          <Cartao
-            Icone={ClipboardList}
-            rotulo="Pedidos"
-            valor={String(ativos.length)}
-            detalhe="no histórico"
-          />
-          <Cartao
-            Icone={Users}
-            rotulo="Clientes"
-            valor={String(clientes.filter((c) => c.ativo).length)}
-            detalhe="ativos"
+          </p>
+
+          {/* CTA — Pedido online */}
+          <Link
+            href="/pedido"
+            id="btn-fazer-pedido-online"
+            className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-ouro-500 px-6 py-3 font-bold text-marrom-900 shadow-lg transition hover:bg-ouro-400 active:scale-95"
+          >
+            <ShoppingBag className="h-5 w-5" />
+            Fazer pedido online
+          </Link>
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-3xl px-4 py-6">
+        {/* Busca */}
+        <div className="relative mb-4">
+          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-texto-suave" />
+          <input
+            id="busca-catalogo"
+            className="campo pl-9"
+            placeholder="Buscar bebida…"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
           />
         </div>
 
-        {/* ------------------------ Contas em aberto ---------------------- */}
-        {emAberto.length > 0 && (
-          <section>
-            <h2 className="mb-2 flex items-center gap-2 text-sm font-bold">
-              <AlertTriangle className="h-4 w-4 text-acento" />
-              Contas em aberto
-            </h2>
-            <ul className="card divide-y divide-borda overflow-hidden">
-              {emAberto.slice(0, 6).map((p) => {
-                const t = calcularTotais(p);
-                return (
-                  <li key={p.id}>
-                    <Link
-                      href={`/pedidos/${p.id}`}
-                      className="flex items-center gap-3 px-4 py-3 transition hover:bg-superficie-2"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-semibold">
-                          {p.clienteNome}
-                        </p>
-                        <p className="text-xs text-texto-suave">
-                          #{String(p.numero).padStart(3, "0")} ·{" "}
-                          {dataBR(p.dataEvento)}
-                        </p>
-                      </div>
-                      <span className="shrink-0 font-black text-acento tabular-nums">
-                        {brl(t.saldoAberto)}
-                      </span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
+        {/* Filtros de categoria */}
+        <div className="mb-6 flex gap-2 overflow-x-auto pb-1">
+          <button
+            type="button"
+            onClick={() => setCategoriaAtiva(null)}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+              !categoriaAtiva
+                ? "bg-acento text-acento-texto"
+                : "border border-borda text-texto-suave hover:border-acento hover:text-acento"
+            }`}
+          >
+            Todos
+          </button>
+          {categorias.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() =>
+                setCategoriaAtiva(cat === categoriaAtiva ? null : cat)
+              }
+              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                categoriaAtiva === cat
+                  ? "bg-acento text-acento-texto"
+                  : "border border-borda text-texto-suave hover:border-acento hover:text-acento"
+              }`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        {carregando && (
+          <p className="py-10 text-center text-sm text-texto-suave">
+            Carregando tabela…
+          </p>
         )}
 
-        {/* -------------------------- Últimos pedidos --------------------- */}
-        <section>
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-sm font-bold">Últimos pedidos</h2>
-            <Link
-              href="/pedidos"
-              className="inline-flex items-center gap-1 text-xs font-semibold text-acento underline-offset-4 hover:underline"
-            >
-              ver todos <ArrowRight className="h-3 w-3" />
-            </Link>
-          </div>
+        {!carregando && visiveis.length === 0 && (
+          <p className="py-10 text-center text-sm text-texto-suave">
+            {busca
+              ? "Nenhum produto encontrado."
+              : "A tabela ainda não tem produtos publicados."}
+          </p>
+        )}
 
-          {recentes.length === 0 ? (
-            <div className="card px-6 py-10 text-center">
-              <p className="font-semibold">Nada por aqui ainda</p>
-              <p className="mt-1 text-sm text-texto-suave">
-                Cadastre produtos e clientes, depois lance o primeiro pedido.
-              </p>
-              <div className="mt-4 flex flex-wrap justify-center gap-2">
-                <Link href="/produtos" className="btn-secundario">
-                  <Package className="h-4 w-4" />
-                  Produtos
-                </Link>
-                <Link href="/clientes" className="btn-secundario">
-                  <Users className="h-4 w-4" />
-                  Clientes
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <ul className="card divide-y divide-borda overflow-hidden">
-              {recentes.map((p) => {
-                const t = calcularTotais(p);
-                return (
-                  <li key={p.id}>
-                    <Link
-                      href={`/pedidos/${p.id}`}
-                      className="flex items-center gap-3 px-4 py-3 transition hover:bg-superficie-2"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-semibold">
-                          {p.clienteNome}
-                        </p>
-                        <p className="mt-0.5 text-xs text-texto-suave">
-                          {dataBR(p.dataEvento)}
-                          {p.titulo && ` · ${p.titulo}`}
-                        </p>
-                      </div>
-                      <StatusChip status={p.status} />
-                      <span className="shrink-0 font-bold tabular-nums">
-                        {brl(t.totalReceber)}
+        <div className="space-y-8">
+          {porCategoria.map(([categoria, itens]) => (
+            <section key={categoria}>
+              <h2 className="mb-3 flex items-center gap-2 border-b-2 border-ouro-500 pb-1.5 text-sm font-black tracking-wide uppercase">
+                <span className="flex-1">{categoria}</span>
+                <span className="text-xs font-semibold text-texto-suave normal-case tracking-normal">
+                  {itens.length} produto(s)
+                </span>
+              </h2>
+              <ul className="card divide-y divide-borda overflow-hidden">
+                {itens.map((p) => (
+                  <li
+                    key={p.id}
+                    className="flex items-center gap-3 px-4 py-3 transition hover:bg-superficie-2"
+                  >
+                    {/* Emoji / Imagem */}
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-superficie-2">
+                      {p.imagemUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={p.imagemUrl}
+                          alt={p.nome}
+                          className="h-full w-full rounded-xl object-contain p-1"
+                        />
+                      ) : (
+                        <span className="text-xl select-none">🍺</span>
+                      )}
+                    </div>
+
+                    <span className="min-w-0 flex-1 font-semibold">
+                      {p.nome}
+                    </span>
+
+                    {p.unPorCaixa > 1 && (
+                      <span className="shrink-0 text-right text-xs text-texto-suave">
+                        cx c/ {p.unPorCaixa}
+                        <br />
+                        {brl(p.precoUn * p.unPorCaixa)}
                       </span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-      </div>
-    </>
-  );
-}
+                    )}
 
-function Cartao({
-  Icone,
-  rotulo,
-  valor,
-  detalhe,
-  destaque = false,
-}: {
-  Icone: React.ComponentType<{ className?: string }>;
-  rotulo: string;
-  valor: string;
-  detalhe: string;
-  destaque?: boolean;
-}) {
-  return (
-    <div
-      className={`card px-4 py-3 ${destaque ? "border-acento/40 bg-acento/5" : ""}`}
-    >
-      <div className="flex items-center gap-1.5 text-texto-suave">
-        <Icone className="h-3.5 w-3.5" />
-        <p className="text-[11px] font-semibold tracking-wide uppercase">
-          {rotulo}
-        </p>
+                    <div className="w-20 shrink-0 text-right">
+                      <span className="font-black tabular-nums text-acento">
+                        {brl(p.precoUn)}
+                      </span>
+                      <span className="block text-[10px] font-normal text-texto-suave">
+                        unidade
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+
+        {/* CTAs finais */}
+        <div className="mt-10 flex flex-col items-center gap-3">
+          <Link
+            href="/pedido"
+            className="btn-primario w-full justify-center py-3.5 text-base sm:w-auto sm:min-w-72"
+          >
+            <ShoppingBag className="h-5 w-5" />
+            Fazer pedido online agora
+          </Link>
+
+          {whatsapp && (
+            <a
+              href={`https://wa.me/55${whatsapp}?text=${encodeURIComponent(
+                "Olá! Vim pela tabela de preços e queria fazer um pedido.",
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-secundario"
+            >
+              <MessageCircle className="h-4 w-4" />
+              Pedir pelo WhatsApp
+            </a>
+          )}
+        </div>
+
+        <footer className="mt-10 flex items-center justify-center gap-3 border-t border-borda pt-5 text-center text-xs text-texto-suave">
+          <span>
+            {EMPRESA.nome} · preços sujeitos a alteração sem aviso prévio
+          </span>
+          <TemaBotao />
+        </footer>
       </div>
-      <p
-        className={`mt-1.5 text-xl font-black tabular-nums md:text-2xl ${
-          destaque ? "text-acento" : ""
-        }`}
-      >
-        {valor}
-      </p>
-      <p className="mt-0.5 truncate text-xs text-texto-suave">{detalhe}</p>
     </div>
   );
 }

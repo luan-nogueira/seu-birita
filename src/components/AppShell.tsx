@@ -22,29 +22,29 @@ import { useDados } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 
 const ITENS = [
-  { href: "/", rotulo: "Início", Icone: Home },
-  { href: "/pedidos", rotulo: "Pedidos", Icone: ClipboardList },
-  { href: "/pedidos/clientes", rotulo: "Online", Icone: ShoppingCart },
-  { href: "/agenda", rotulo: "Agenda", Icone: Calendar },
-  { href: "/produtos", rotulo: "Produtos", Icone: Package },
-  { href: "/clientes", rotulo: "Clientes", Icone: Users },
-  { href: "/financeiro", rotulo: "Financeiro", Icone: Wallet },
+  { href: "/admin", rotulo: "Início", Icone: Home },
+  { href: "/admin/pedidos", rotulo: "Pedidos", Icone: ClipboardList },
+  { href: "/admin/pedidos/clientes", rotulo: "Online", Icone: ShoppingCart },
+  { href: "/admin/agenda", rotulo: "Agenda", Icone: Calendar },
+  { href: "/admin/produtos", rotulo: "Produtos", Icone: Package },
+  { href: "/admin/clientes", rotulo: "Clientes", Icone: Users },
+  { href: "/admin/financeiro", rotulo: "Financeiro", Icone: Wallet },
 ];
 
 const ITENS_DESKTOP = [
   ...ITENS,
-  { href: "/estoque", rotulo: "Estoque", Icone: Boxes },
-  { href: "/fornecedores", rotulo: "Fornecedores", Icone: Truck },
+  { href: "/admin/estoque", rotulo: "Estoque", Icone: Boxes },
+  { href: "/admin/fornecedores", rotulo: "Fornecedores", Icone: Truck },
 ];
 
 /** Telas que qualquer um alcança sem estar logado. */
-const ROTAS_PUBLICAS = ["/login", "/catalogo", "/pedido"];
+const ROTAS_PUBLICAS = ["/login", "/admin/pedido"];
 
 function estaAtivo(href: string, caminho: string) {
-  if (href === "/") return caminho === "/";
-  // O menu "Pedidos" não deve ficar ativo se estivermos em "Pedidos Online" (/pedidos/clientes)
-  if (href === "/pedidos") {
-    return caminho === "/pedidos" || (caminho.startsWith("/pedidos/") && !caminho.startsWith("/pedidos/clientes"));
+  if (href === "/admin") return caminho === "/admin";
+  // O menu "Pedidos" não deve ficar ativo se estivermos em "Pedidos Online" (/admin/pedidos/clientes)
+  if (href === "/admin/pedidos") {
+    return caminho === "/admin/pedidos" || (caminho.startsWith("/admin/pedidos/") && !caminho.startsWith("/admin/pedidos/clientes"));
   }
   return caminho === href || caminho.startsWith(`${href}/`);
 }
@@ -94,7 +94,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-dvh">
       {/* Barra superior — some no desktop, onde a lateral assume */}
       <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-black/20 bg-barra px-4 text-barra-texto md:hidden">
-        <Link href="/" className="text-lg">
+        <Link href="/admin" className="text-lg">
           <LogoMarca />
         </Link>
         <div className="ml-auto flex items-center">
@@ -106,7 +106,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="mx-auto flex w-full max-w-7xl">
         {/* Lateral — só no desktop */}
         <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-borda bg-barra px-3 py-5 text-barra-texto md:flex">
-          <Link href="/" className="mb-6 px-2 text-2xl">
+          <Link href="/admin" className="mb-6 px-2 text-2xl">
             <LogoMarca />
           </Link>
 
