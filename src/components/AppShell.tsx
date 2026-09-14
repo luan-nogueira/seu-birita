@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { LogoMarca } from "./Logo";
 import { TemaBotao } from "./TemaBotao";
-import { Modal } from "./ui/Modal";
+import { Modal } from "./ui";
 import { useDados } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 
