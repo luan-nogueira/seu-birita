@@ -46,6 +46,7 @@ import type {
   Pedido,
   PedidoItem,
   PedidoStatus,
+  Produto,
 } from "@/lib/types";
 
 const STATUS_DISPONIVEIS: PedidoStatus[] = [
@@ -903,6 +904,7 @@ function SeletorProdutos({
   const [aberto, setAberto] = useState(false);
   const [busca, setBusca] = useState("");
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
+  const [tabelas, setTabelas] = useState<Map<string, 1 | 2 | 3>>(new Map());
 
   const jaNoPedido = useMemo(
     () => new Set(pedido.itens.map((i) => i.produtoId)),
@@ -942,12 +944,22 @@ function SeletorProdutos({
     });
   }
 
+  function precoDaTabela(p: Produto, tabela: 1 | 2 | 3): number {
+    if (tabela === 2 && p.precoTabela2) return p.precoTabela2;
+    if (tabela === 3 && p.precoTabela3) return p.precoTabela3;
+    return p.precoUn;
+  }
+
   function confirmar() {
     const itens = produtos
       .filter((p) => marcados.has(p.id))
-      .map((p) => novoItem(p));
+      .map((p) => {
+        const tabela = tabelas.get(p.id) ?? 1;
+        return novoItem({ ...p, precoUn: precoDaTabela(p, tabela) });
+      });
     aoAdicionar(itens);
     setMarcados(new Set());
+    setTabelas(new Map());
     setBusca("");
     setAberto(false);
   }
@@ -1007,31 +1019,59 @@ function SeletorProdutos({
                   {categoria}
                 </p>
                 <ul className="divide-y divide-borda">
-                  {itens.map((p) => (
-                    <li key={p.id}>
-                      <label className="flex cursor-pointer items-center gap-3 py-2.5">
-                        <input
-                          type="checkbox"
-                          className="h-5 w-5 shrink-0 accent-[var(--acento)]"
-                          checked={marcados.has(p.id)}
-                          onChange={() => alternar(p.id)}
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate font-semibold">
-                            {p.nome}
-                          </span>
-                          {p.unPorCaixa > 1 && (
-                            <span className="block text-xs text-texto-suave">
-                              {p.unPorCaixa} un/cx
+                  {itens.map((p) => {
+                    const temTabelas = !!(p.precoTabela2 || p.precoTabela3);
+                    const tabelaAtual = tabelas.get(p.id) ?? 1;
+                    const marcado = marcados.has(p.id);
+                    const opcoesTabela = ([1, 2, 3] as const).filter(
+                      (t) => t === 1 || (t === 2 && p.precoTabela2) || (t === 3 && p.precoTabela3),
+                    );
+                    return (
+                      <li key={p.id} className="py-2.5">
+                        <label className="flex cursor-pointer items-center gap-3">
+                          <input
+                            type="checkbox"
+                            className="h-5 w-5 shrink-0 accent-[var(--acento)]"
+                            checked={marcado}
+                            onChange={() => alternar(p.id)}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate font-semibold">
+                              {p.nome}
                             </span>
-                          )}
-                        </span>
-                        <span className="shrink-0 text-sm font-bold tabular-nums">
-                          {brl(p.precoUn)}
-                        </span>
-                      </label>
-                    </li>
-                  ))}
+                            {p.unPorCaixa > 1 && (
+                              <span className="block text-xs text-texto-suave">
+                                {p.unPorCaixa} un/cx
+                              </span>
+                            )}
+                          </span>
+                          <span className="shrink-0 text-sm font-bold tabular-nums">
+                            {brl(precoDaTabela(p, tabelaAtual))}
+                          </span>
+                        </label>
+                        {marcado && temTabelas && (
+                          <div className="mt-1.5 ml-8 flex gap-1">
+                            {opcoesTabela.map((t) => (
+                              <button
+                                key={t}
+                                type="button"
+                                onClick={() =>
+                                  setTabelas((m) => new Map(m).set(p.id, t))
+                                }
+                                className={`rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                                  tabelaAtual === t
+                                    ? "bg-acento text-acento-texto"
+                                    : "bg-superficie-2 text-texto-suave hover:text-texto"
+                                }`}
+                              >
+                                Tabela {t}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             ))}

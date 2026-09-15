@@ -25,6 +25,8 @@ type Formulario = {
   categoria: string;
   unPorCaixa: string;
   precoUn: string;
+  precoTabela2: string;
+  precoTabela3: string;
   precoCusto: string;
   estoqueMinimo: string;
   imagemUrl: string;
@@ -38,6 +40,8 @@ const FORM_VAZIO: Formulario = {
   categoria: CATEGORIAS_PADRAO[0],
   unPorCaixa: "1",
   precoUn: "",
+  precoTabela2: "",
+  precoTabela3: "",
   precoCusto: "",
   estoqueMinimo: "0",
   imagemUrl: "",
@@ -157,6 +161,8 @@ export default function ProdutosPage() {
       categoria: p.categoria,
       unPorCaixa: String(p.unPorCaixa),
       precoUn: paraCampo(p.precoUn),
+      precoTabela2: p.precoTabela2 ? paraCampo(p.precoTabela2) : "",
+      precoTabela3: p.precoTabela3 ? paraCampo(p.precoTabela3) : "",
       precoCusto: paraCampo(p.precoCusto),
       estoqueMinimo: String(p.estoqueMinimo ?? 0),
       imagemUrl: p.imagemUrl ?? "",
@@ -179,6 +185,8 @@ export default function ProdutosPage() {
       // Uma caixa nunca tem zero unidade; o mínimo é o produto avulso.
       unPorCaixa: Math.max(1, Math.round(paraNumero(form.unPorCaixa))),
       precoUn: paraNumero(form.precoUn),
+      precoTabela2: form.precoTabela2 ? paraNumero(form.precoTabela2) : undefined,
+      precoTabela3: form.precoTabela3 ? paraNumero(form.precoTabela3) : undefined,
       precoCusto: paraNumero(form.precoCusto),
       estoqueUn: editando?.estoqueUn ?? 0,
       estoqueMinimo: Math.max(0, Math.round(paraNumero(form.estoqueMinimo))),
@@ -485,7 +493,7 @@ export default function ProdutosPage() {
             </div>
             <div>
               <label className="rotulo" htmlFor="preco">
-                Preço por unidade
+                Preço · Tabela 1
               </label>
               <input
                 id="preco"
@@ -506,6 +514,39 @@ export default function ProdutosPage() {
               </strong>
             </p>
           )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="rotulo" htmlFor="preco2">
+                Preço · Tabela 2 (opcional)
+              </label>
+              <input
+                id="preco2"
+                className="campo"
+                inputMode="decimal"
+                placeholder="sem tabela 2"
+                value={form.precoTabela2}
+                onChange={(e) => setForm({ ...form, precoTabela2: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="rotulo" htmlFor="preco3">
+                Preço · Tabela 3 (opcional)
+              </label>
+              <input
+                id="preco3"
+                className="campo"
+                inputMode="decimal"
+                placeholder="sem tabela 3"
+                value={form.precoTabela3}
+                onChange={(e) => setForm({ ...form, precoTabela3: e.target.value })}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-texto-suave">
+            Preencha só se este produto tiver mais de um preço pra escolher na
+            hora de montar o pedido (ex: cliente VIP, evento fechado...).
+          </p>
 
           <div className="grid grid-cols-2 gap-3">
             <div>

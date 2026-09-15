@@ -35,8 +35,12 @@ export interface Produto {
   categoria: string;
   /** Quantas unidades vêm em uma caixa. Corona = 24, Coca lata = 12, Suco = 6. */
   unPorCaixa: number;
-  /** Preço de venda por unidade, em reais. */
+  /** Preço de venda por unidade, em reais — a "Tabela 1", usada por padrão. */
   precoUn: number;
+  /** Preço alternativo (Tabela 2) — opcional, pra escolher ao montar o pedido. */
+  precoTabela2?: number;
+  /** Preço alternativo (Tabela 3) — opcional, pra escolher ao montar o pedido. */
+  precoTabela3?: number;
   /** Preço de custo por unidade, em reais. Usado pra margem. */
   precoCusto: number;
   estoqueUn: number;
