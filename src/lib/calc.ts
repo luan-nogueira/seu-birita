@@ -107,6 +107,20 @@ export function lucroTotal(pedidos: Pedido[]): number {
   return pedidos.reduce((soma, p) => soma + calcularTotais(p).lucro, 0);
 }
 
+/**
+ * Quanto de cada produto está fora do galpão por causa deste pedido —
+ * usado pra saber quanto debitar/creditar do estoque automaticamente.
+ * Pedido cancelado não tira nada do galpão (é como se nunca tivesse saído).
+ */
+export function efeitoEstoque(pedido: Pedido): Map<string, number> {
+  const mapa = new Map<string, number>();
+  if (pedido.status === "CANCELADO") return mapa;
+  for (const item of pedido.itens) {
+    mapa.set(item.produtoId, saldoUn(item, pedido.tipo));
+  }
+  return mapa;
+}
+
 /** Cria um item zerado a partir de um produto. */
 export function novoItem(produto: {
   id: string;

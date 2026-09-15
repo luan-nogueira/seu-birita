@@ -1,12 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Cabecalho, Modal } from "@/components/ui";
 import { useDados } from "@/lib/store";
 import { novoId } from "@/lib/db";
-import { brl, dataHoraBR } from "@/lib/format";
-import { Boxes, Plus, ArrowDown, ArrowUp, RefreshCcw } from "lucide-react";
-import type { EstoqueMovimento, EstoqueTipo, EstoqueOrigem } from "@/lib/types";
+import { brl, dataBR, hojeISO, normalizar } from "@/lib/format";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  Boxes,
+  ChevronRight,
+  Plus,
+  RefreshCcw,
+  Search,
+} from "lucide-react";
+import type { EstoqueMovimento, EstoqueOrigem, EstoqueTipo, Produto } from "@/lib/types";
+
+const ROTULO_ORIGEM: Record<EstoqueOrigem, string> = {
+  COMPRA: "Compra",
+  PEDIDO: "Venda/Entrega",
+  DEVOLUCAO: "Devolução",
+  AJUSTE: "Ajuste",
+  PERDA: "Perda",
+};
+
+/** Primeiro dia do mês atual, formato YYYY-MM-DD. */
+function inicioDoMes(): string {
+  const hoje = new Date();
+  return new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().slice(0, 10);
+}
 
 export default function EstoquePage() {
   const {
@@ -18,30 +41,47 @@ export default function EstoquePage() {
     produtoPorId,
   } = useDados();
 
+  const [busca, setBusca] = useState("");
+  const [produtoHistorico, setProdutoHistorico] = useState<Produto | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
-  // Form state
+  // Form do lançamento manual
   const [tipoMovimento, setTipoMovimento] = useState<EstoqueOrigem>("COMPRA");
   const [produtoId, setProdutoId] = useState("");
   const [fornecedorId, setFornecedorId] = useState("");
   const [quantidadeUn, setQuantidadeUn] = useState("");
   const [custoTotal, setCustoTotal] = useState("");
   const [obs, setObs] = useState("");
-
   const [buscaProduto, setBuscaProduto] = useState("");
   const [focoBusca, setFocoBusca] = useState(false);
 
-  const produtosOrdenados = [...produtos].filter(p => p.ativo);
-  const produtosFiltrados = produtosOrdenados.filter(p =>
-    p.nome.toLowerCase().includes(buscaProduto.toLowerCase())
+  const produtosOrdenados = [...produtos].filter((p) => p.ativo);
+  const produtosFiltrados = produtosOrdenados.filter((p) =>
+    p.nome.toLowerCase().includes(buscaProduto.toLowerCase()),
   );
-  const movimentosOrdenados = [...movimentos].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
+
+  const visiveis = useMemo(() => {
+    const termo = normalizar(busca);
+    return produtosOrdenados.filter(
+      (p) => !termo || normalizar(p.nome).includes(termo) || normalizar(p.categoria).includes(termo),
+    );
+  }, [produtosOrdenados, busca]);
+
+  const agrupados = useMemo(() => {
+    const mapa = new Map<string, Produto[]>();
+    for (const p of visiveis) {
+      const chave = p.categoria || "Sem categoria";
+      if (!mapa.has(chave)) mapa.set(chave, []);
+      mapa.get(chave)!.push(p);
+    }
+    return Array.from(mapa.entries()).sort(([a], [b]) => a.localeCompare(b, "pt-BR"));
+  }, [visiveis]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!produtoId || !quantidadeUn) return;
-    
+
     const qtd = Number(quantidadeUn);
     if (qtd <= 0) return;
 
@@ -50,12 +90,15 @@ export default function EstoquePage() {
       const produto = produtoPorId(produtoId);
       if (!produto) throw new Error("Produto não encontrado");
 
-      const tipoEntrada: EstoqueTipo = (tipoMovimento === "COMPRA" || tipoMovimento === "DEVOLUCAO") ? "ENTRADA" 
-        : (tipoMovimento === "PERDA" ? "SAIDA" : "AJUSTE");
-      
+      const tipoEntrada: EstoqueTipo =
+        tipoMovimento === "COMPRA" || tipoMovimento === "DEVOLUCAO"
+          ? "ENTRADA"
+          : tipoMovimento === "PERDA"
+            ? "SAIDA"
+            : "AJUSTE";
+
       const isEntrada = tipoEntrada === "ENTRADA" || (tipoEntrada === "AJUSTE" && tipoMovimento !== "PERDA");
-      
-      // Calculate unit cost if it's a purchase
+
       let custoUn: number | undefined = undefined;
       if (tipoMovimento === "COMPRA" && custoTotal) {
         custoUn = Number(custoTotal) / qtd;
@@ -77,30 +120,25 @@ export default function EstoquePage() {
 
       await salvarMovimento(novoMov);
 
-      // Calcular o novo custo médio se for compra
       let novoPrecoCusto = produto.precoCusto;
       if (tipoMovimento === "COMPRA" && custoUn !== undefined) {
-        // Pegar compras anteriores desse produto
         const comprasAnteriores = movimentos
-          .filter(m => m.produtoId === produtoId && m.origem === "COMPRA" && m.custoUn !== undefined)
+          .filter((m) => m.produtoId === produtoId && m.origem === "COMPRA" && m.custoUn !== undefined)
           .sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
-          .slice(0, 2); // Pegar as últimas 2 antes dessa nova (totalizando 3)
+          .slice(0, 2);
 
         let totalSoma = qtd * custoUn;
         let totalQtd = qtd;
 
         for (const c of comprasAnteriores) {
-          totalSoma += (c.quantidadeUn * c.custoUn!);
+          totalSoma += c.quantidadeUn * c.custoUn!;
           totalQtd += c.quantidadeUn;
         }
 
         novoPrecoCusto = totalSoma / totalQtd;
       }
 
-      // Atualizar o produto
-      const novoEstoqueUn = isEntrada 
-        ? produto.estoqueUn + qtd 
-        : Math.max(0, produto.estoqueUn - qtd);
+      const novoEstoqueUn = isEntrada ? produto.estoqueUn + qtd : Math.max(0, produto.estoqueUn - qtd);
 
       await salvarProduto({
         ...produto,
@@ -109,7 +147,6 @@ export default function EstoquePage() {
         atualizadoEm: new Date().toISOString(),
       });
 
-      // Fechar e limpar modal
       setModalAberto(false);
       setProdutoId("");
       setBuscaProduto("");
@@ -127,13 +164,9 @@ export default function EstoquePage() {
     <>
       <Cabecalho
         titulo="Estoque"
-        subtitulo="Histórico de movimentações e lançamentos"
+        subtitulo="Quantidade atual e histórico por produto"
         acao={
-          <button
-            type="button"
-            onClick={() => setModalAberto(true)}
-            className="btn-primario text-sm"
-          >
+          <button type="button" onClick={() => setModalAberto(true)} className="btn-primario text-sm">
             <Plus className="h-4 w-4" />
             Lançar Movimento
           </button>
@@ -141,71 +174,80 @@ export default function EstoquePage() {
       />
 
       <div className="px-4 md:px-6">
-        {movimentosOrdenados.length === 0 ? (
-          <div className="card flex flex-col items-center gap-3 px-6 py-14 text-center mt-6">
+        <div className="relative mb-4">
+          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-texto-suave" />
+          <input
+            className="campo pl-9"
+            placeholder="Buscar produto ou categoria…"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
+        </div>
+
+        {visiveis.length === 0 ? (
+          <div className="card flex flex-col items-center gap-3 px-6 py-14 text-center">
             <div className="grid h-14 w-14 place-items-center rounded-2xl bg-superficie-2 text-texto-suave">
               <Boxes className="h-7 w-7" />
             </div>
-            <p className="font-bold">Nenhum movimento registrado</p>
-            <p className="text-sm text-texto-suave max-w-xs">
-              Lembre-se de lançar suas compras para manter o Custo Médio e o saldo do galpão sempre corretos.
-            </p>
+            <p className="font-bold">Nenhum produto encontrado</p>
           </div>
         ) : (
-          <div className="card overflow-hidden mt-6">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-superficie-2 text-texto-suave">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">Data</th>
-                    <th className="px-4 py-3 font-semibold">Produto</th>
-                    <th className="px-4 py-3 font-semibold">Operação</th>
-                    <th className="px-4 py-3 font-semibold text-right">Qtd</th>
-                    <th className="px-4 py-3 font-semibold text-right">Custo Un</th>
-                    <th className="px-4 py-3 font-semibold">Observação</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-borda">
-                  {movimentosOrdenados.map((mov) => {
-                    const isEntrada = mov.tipo === "ENTRADA";
+          <div className="space-y-6">
+            {agrupados.map(([categoria, itens]) => (
+              <section key={categoria}>
+                <h2 className="mb-2 flex items-center gap-2 text-xs font-bold tracking-wide text-texto-suave uppercase">
+                  <Boxes className="h-3.5 w-3.5" />
+                  {categoria}
+                  <span className="font-normal normal-case">({itens.length})</span>
+                </h2>
+                <ul className="card divide-y divide-borda overflow-hidden">
+                  {itens.map((p) => {
+                    const baixo = p.estoqueMinimo > 0 && p.estoqueUn <= p.estoqueMinimo;
                     return (
-                      <tr key={mov.id} className="transition hover:bg-superficie-2/50">
-                        <td className="px-4 py-3 text-texto-suave">
-                          {dataHoraBR(mov.criadoEm).split(" ")[0]}
-                        </td>
-                        <td className="px-4 py-3 font-semibold">
-                          {mov.produtoNome}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1.5">
-                            {isEntrada ? (
-                              <ArrowDown className="h-3.5 w-3.5 text-emerald-500" />
-                            ) : (
-                              <ArrowUp className="h-3.5 w-3.5 text-red-500" />
+                      <li key={p.id}>
+                        <button
+                          type="button"
+                          onClick={() => setProdutoHistorico(p)}
+                          className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-superficie-2"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-semibold">{p.nome}</p>
+                            {p.unPorCaixa > 1 && (
+                              <p className="text-xs text-texto-suave">{p.unPorCaixa} un/cx</p>
                             )}
-                            <span className="text-xs font-bold uppercase tracking-wide text-texto-suave">
-                              {mov.origem}
-                            </span>
                           </div>
-                        </td>
-                        <td className={`px-4 py-3 text-right font-bold ${isEntrada ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
-                          {isEntrada ? "+" : "-"}{mov.quantidadeUn} un
-                        </td>
-                        <td className="px-4 py-3 text-right tabular-nums text-texto-suave">
-                          {mov.custoUn ? brl(mov.custoUn) : "-"}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-texto-suave max-w-[200px] truncate">
-                          {mov.obs || "-"}
-                        </td>
-                      </tr>
+                          {baixo && (
+                            <AlertTriangle
+                              className="h-4 w-4 shrink-0 text-acento"
+                              aria-label="Estoque baixo"
+                            />
+                          )}
+                          <span
+                            className={`shrink-0 text-right font-black tabular-nums ${
+                              baixo ? "text-acento" : ""
+                            }`}
+                          >
+                            {p.estoqueUn} un
+                          </span>
+                          <ChevronRight className="h-4 w-4 shrink-0 text-texto-suave" />
+                        </button>
+                      </li>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
+                </ul>
+              </section>
+            ))}
           </div>
         )}
       </div>
+
+      {produtoHistorico && (
+        <ModalHistorico
+          produto={produtoHistorico}
+          movimentos={movimentos.filter((m) => m.produtoId === produtoHistorico.id)}
+          aoFechar={() => setProdutoHistorico(null)}
+        />
+      )}
 
       <Modal
         aberto={modalAberto}
@@ -254,10 +296,10 @@ export default function EstoquePage() {
             <label className="mb-1.5 block text-sm font-semibold">Produto</label>
             <input
               type="text"
-              value={produtoId ? (produtos.find(p => p.id === produtoId)?.nome || "") : buscaProduto}
+              value={produtoId ? produtos.find((p) => p.id === produtoId)?.nome || "" : buscaProduto}
               onChange={(e) => {
                 setBuscaProduto(e.target.value);
-                setProdutoId(""); // Clear selection when typing
+                setProdutoId("");
               }}
               onFocus={() => setFocoBusca(true)}
               onBlur={() => setTimeout(() => setFocoBusca(false), 200)}
@@ -278,7 +320,7 @@ export default function EstoquePage() {
                       }}
                       className="cursor-pointer px-4 py-3 hover:bg-superficie-2 text-sm border-b border-borda last:border-0 transition-colors"
                     >
-                      <span className="font-semibold">{p.nome}</span> 
+                      <span className="font-semibold">{p.nome}</span>
                       <span className="text-texto-suave text-xs ml-2">(Estoque atual: {p.estoqueUn} un)</span>
                     </li>
                   ))
@@ -298,8 +340,10 @@ export default function EstoquePage() {
                 className="campo block w-full"
               >
                 <option value="">Nenhum fornecedor vinculado</option>
-                {fornecedores.map(f => (
-                  <option key={f.id} value={f.id}>{f.nome}</option>
+                {fornecedores.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.nome}
+                  </option>
                 ))}
               </select>
             </div>
@@ -321,17 +365,13 @@ export default function EstoquePage() {
                   placeholder="0"
                   className="campo block w-full pr-12"
                 />
-                <span className="absolute right-4 top-2.5 text-sm text-texto-suave pointer-events-none">
-                  un
-                </span>
+                <span className="absolute right-4 top-2.5 text-sm text-texto-suave pointer-events-none">un</span>
               </div>
             </div>
 
             {tipoMovimento === "COMPRA" && (
               <div>
-                <label className="mb-1.5 block text-sm font-semibold">
-                  Custo Total (R$)
-                </label>
+                <label className="mb-1.5 block text-sm font-semibold">Custo Total (R$)</label>
                 <input
                   type="number"
                   min="0.01"
@@ -347,15 +387,16 @@ export default function EstoquePage() {
           </div>
 
           {tipoMovimento === "COMPRA" && quantidadeUn && custoTotal && (
-             <div className="bg-emerald-50 dark:bg-emerald-950/30 p-3 rounded-xl border border-emerald-200 dark:border-emerald-900/50 flex items-center gap-3">
-               <div className="bg-emerald-100 dark:bg-emerald-900 text-emerald-600 dark:text-emerald-400 p-2 rounded-lg shrink-0">
-                 <RefreshCcw className="w-5 h-5" />
-               </div>
-               <p className="text-xs text-emerald-800 dark:text-emerald-300">
-                 Isso atualizará o <strong>Custo Médio Ponderado</strong> do produto. <br/>
-                 O custo unitário dessa compra saiu a <strong>{brl(Number(custoTotal) / Number(quantidadeUn))}</strong>.
-               </p>
-             </div>
+            <div className="bg-emerald-50 dark:bg-emerald-950/30 p-3 rounded-xl border border-emerald-200 dark:border-emerald-900/50 flex items-center gap-3">
+              <div className="bg-emerald-100 dark:bg-emerald-900 text-emerald-600 dark:text-emerald-400 p-2 rounded-lg shrink-0">
+                <RefreshCcw className="w-5 h-5" />
+              </div>
+              <p className="text-xs text-emerald-800 dark:text-emerald-300">
+                Isso atualizará o <strong>Custo Médio Ponderado</strong> do produto. <br />
+                O custo unitário dessa compra saiu a{" "}
+                <strong>{brl(Number(custoTotal) / Number(quantidadeUn))}</strong>.
+              </p>
+            </div>
           )}
 
           <div>
@@ -371,5 +412,128 @@ export default function EstoquePage() {
         </form>
       </Modal>
     </>
+  );
+}
+
+/** Histórico de um produto — com filtro de data, pra saber "quanto vendi em X". */
+function ModalHistorico({
+  produto,
+  movimentos,
+  aoFechar,
+}: {
+  produto: Produto;
+  movimentos: EstoqueMovimento[];
+  aoFechar: () => void;
+}) {
+  const [de, setDe] = useState(inicioDoMes());
+  const [ate, setAte] = useState(hojeISO());
+
+  const noPeriodo = useMemo(
+    () =>
+      movimentos
+        .filter((m) => {
+          const data = m.data.slice(0, 10);
+          return data >= de && data <= ate;
+        })
+        .sort((a, b) => b.data.localeCompare(a.data)),
+    [movimentos, de, ate],
+  );
+
+  const totalSaida = noPeriodo.filter((m) => m.tipo === "SAIDA").reduce((s, m) => s + m.quantidadeUn, 0);
+  const totalEntrada = noPeriodo.filter((m) => m.tipo === "ENTRADA").reduce((s, m) => s + m.quantidadeUn, 0);
+
+  return (
+    <Modal aberto aoFechar={aoFechar} titulo={produto.nome} largura="max-w-xl">
+      <div className="space-y-4">
+        <div className="card flex items-center justify-between px-4 py-3">
+          <span className="text-sm font-semibold text-texto-suave">Estoque atual</span>
+          <span className="text-xl font-black tabular-nums">{produto.estoqueUn} un</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="rotulo" htmlFor="hist-de">
+              De
+            </label>
+            <input
+              id="hist-de"
+              type="date"
+              className="campo"
+              value={de}
+              onChange={(e) => setDe(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="rotulo" htmlFor="hist-ate">
+              Até
+            </label>
+            <input
+              id="hist-ate"
+              type="date"
+              className="campo"
+              value={ate}
+              onChange={(e) => setAte(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="card px-3 py-2">
+            <p className="flex items-center gap-1 text-[11px] font-semibold tracking-wide text-texto-suave uppercase">
+              <ArrowUp className="h-3 w-3 text-red-500" />
+              Saiu no período
+            </p>
+            <p className="mt-0.5 text-lg font-black tabular-nums text-red-600 dark:text-red-400">
+              {totalSaida} un
+            </p>
+          </div>
+          <div className="card px-3 py-2">
+            <p className="flex items-center gap-1 text-[11px] font-semibold tracking-wide text-texto-suave uppercase">
+              <ArrowDown className="h-3 w-3 text-emerald-500" />
+              Entrou no período
+            </p>
+            <p className="mt-0.5 text-lg font-black tabular-nums text-emerald-600 dark:text-emerald-400">
+              {totalEntrada} un
+            </p>
+          </div>
+        </div>
+
+        {noPeriodo.length === 0 ? (
+          <p className="py-8 text-center text-sm text-texto-suave">
+            Nenhuma movimentação nesse período.
+          </p>
+        ) : (
+          <ul className="card divide-y divide-borda overflow-hidden">
+            {noPeriodo.map((m) => {
+              const isEntrada = m.tipo === "ENTRADA";
+              return (
+                <li key={m.id} className="flex items-center gap-3 px-4 py-2.5">
+                  {isEntrada ? (
+                    <ArrowDown className="h-4 w-4 shrink-0 text-emerald-500" />
+                  ) : (
+                    <ArrowUp className="h-4 w-4 shrink-0 text-red-500" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">{ROTULO_ORIGEM[m.origem]}</p>
+                    <p className="text-xs text-texto-suave">
+                      {dataBR(m.data)}
+                      {m.obs && ` · ${m.obs}`}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 text-sm font-black tabular-nums ${
+                      isEntrada ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+                    }`}
+                  >
+                    {isEntrada ? "+" : "-"}
+                    {m.quantidadeUn} un
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </Modal>
   );
 }

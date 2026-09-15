@@ -22,6 +22,7 @@ import { useDados, novoId } from "@/lib/store";
 import {
   calcularTotais,
   devolvidoUn,
+  efeitoEstoque,
   entregueUn,
   novoItem,
   saldoUn,
@@ -40,6 +41,7 @@ import {
   paraNumero,
 } from "@/lib/format";
 import type {
+  EstoqueMovimento,
   FormaPagamento,
   Pedido,
   PedidoItem,
@@ -65,8 +67,17 @@ const ROTULO_STATUS: Record<PedidoStatus, string> = {
 export default function PedidoPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { pedidoPorId, salvarPedido, removerPedido, pagamentos, removerPagamento, carregando } =
-    useDados();
+  const {
+    pedidoPorId,
+    salvarPedido,
+    removerPedido,
+    pagamentos,
+    removerPagamento,
+    produtoPorId,
+    salvarProduto,
+    salvarMovimento,
+    carregando,
+  } = useDados();
 
   const remoto = pedidoPorId(id);
 
@@ -78,12 +89,53 @@ export default function PedidoPage() {
   const [modalExcluirAberto, setModalExcluirAberto] = useState(false);
   const semeado = useRef(false);
 
+  // Última "foto" do que este pedido já tirou do estoque — a baseline pra
+  // calcular o que mudou (delta) e lançar só a diferença a cada salvamento.
+  const ultimoEstoqueAplicado = useRef<Map<string, number> | null>(null);
+
   useEffect(() => {
     if (!semeado.current && remoto) {
       setPedido(remoto);
+      ultimoEstoqueAplicado.current = efeitoEstoque(remoto);
       semeado.current = true;
     }
   }, [remoto]);
+
+  /** Lança em Estoque só a diferença entre o que saiu antes e o que sai agora. */
+  async function aplicarAjusteEstoque(
+    efeitoAntes: Map<string, number>,
+    efeitoDepois: Map<string, number>,
+    pedidoId: string,
+  ) {
+    const produtoIds = new Set([...efeitoAntes.keys(), ...efeitoDepois.keys()]);
+    for (const produtoId of produtoIds) {
+      const antes = efeitoAntes.get(produtoId) ?? 0;
+      const depois = efeitoDepois.get(produtoId) ?? 0;
+      const delta = depois - antes; // positivo = mais unidades saíram do galpão
+      if (delta === 0) continue;
+
+      const produto = produtoPorId(produtoId);
+      if (!produto) continue;
+
+      const movimento: EstoqueMovimento = {
+        id: novoId(),
+        produtoId,
+        produtoNome: produto.nome,
+        tipo: delta > 0 ? "SAIDA" : "ENTRADA",
+        origem: delta > 0 ? "PEDIDO" : "DEVOLUCAO",
+        quantidadeUn: Math.abs(delta),
+        referenciaId: pedidoId,
+        data: new Date().toISOString(),
+        criadoEm: new Date().toISOString(),
+      };
+      await salvarMovimento(movimento);
+      await salvarProduto({
+        ...produto,
+        estoqueUn: Math.max(0, produto.estoqueUn - delta),
+        atualizadoEm: new Date().toISOString(),
+      });
+    }
+  }
 
   // Salvamento automático com uma pausa, pra não gravar a cada tecla.
   const primeiraGravacao = useRef(true);
@@ -102,9 +154,19 @@ export default function PedidoPage() {
         valorFinal: totais.valorFinal,
         atualizadoEm: new Date().toISOString(),
       });
+
+      const efeitoNovo = efeitoEstoque(pedido);
+      await aplicarAjusteEstoque(
+        ultimoEstoqueAplicado.current ?? new Map(),
+        efeitoNovo,
+        pedido.id,
+      );
+      ultimoEstoqueAplicado.current = efeitoNovo;
+
       setSalvando(false);
     }, 700);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pedido, salvarPedido]);
 
   if (carregando || (!pedido && !semeado.current)) {
@@ -171,6 +233,14 @@ export default function PedidoPage() {
     for (const p of pagamentosDoPedido) {
       await removerPagamento(p.id);
     }
+
+    // Devolve pro estoque tudo que este pedido tinha tirado.
+    await aplicarAjusteEstoque(
+      ultimoEstoqueAplicado.current ?? efeitoEstoque(pedido!),
+      new Map(),
+      pedido!.id,
+    );
+
     await removerPedido(pedido!.id);
     router.push("/admin/pedidos");
   }
