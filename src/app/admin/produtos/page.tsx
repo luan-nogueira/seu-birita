@@ -385,18 +385,33 @@ export default function ProdutosPage() {
             <label className="rotulo" htmlFor="categoria">
               Categoria
             </label>
-            <input
+            <select
               id="categoria"
               className="campo"
-              list="lista-categorias"
-              value={form.categoria}
-              onChange={(e) => setForm({ ...form, categoria: e.target.value })}
-            />
-            <datalist id="lista-categorias">
+              value={categorias.includes(form.categoria) ? form.categoria : "__nova__"}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  categoria: e.target.value === "__nova__" ? "" : e.target.value,
+                })
+              }
+            >
               {categorias.map((c) => (
-                <option key={c} value={c} />
+                <option key={c} value={c}>
+                  {c}
+                </option>
               ))}
-            </datalist>
+              <option value="__nova__">+ Nova categoria…</option>
+            </select>
+            {!categorias.includes(form.categoria) && (
+              <input
+                className="campo mt-2"
+                autoFocus
+                placeholder="Nome da nova categoria"
+                value={form.categoria}
+                onChange={(e) => setForm({ ...form, categoria: e.target.value })}
+              />
+            )}
           </div>
 
           <div>
@@ -644,6 +659,10 @@ function ModalImportar({
     () => new Set(produtos.map((p) => normalizar(p.nome))),
     [produtos],
   );
+  const categorias = useMemo(() => {
+    const doBanco = produtos.map((p) => p.categoria).filter(Boolean);
+    return Array.from(new Set([...CATEGORIAS_PADRAO, ...doBanco]));
+  }, [produtos]);
 
   async function importar() {
     setSalvando(true);
@@ -726,18 +745,30 @@ function ModalImportar({
           <label className="rotulo" htmlFor="cat-import">
             Categoria dos produtos novos
           </label>
-          <input
+          <select
             id="cat-import"
             className="campo"
-            list="lista-categorias-import"
-            value={categoria}
-            onChange={(e) => setCategoria(e.target.value)}
-          />
-          <datalist id="lista-categorias-import">
-            {CATEGORIAS_PADRAO.map((c) => (
-              <option key={c} value={c} />
+            value={categorias.includes(categoria) ? categoria : "__nova__"}
+            onChange={(e) =>
+              setCategoria(e.target.value === "__nova__" ? "" : e.target.value)
+            }
+          >
+            {categorias.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
             ))}
-          </datalist>
+            <option value="__nova__">+ Nova categoria…</option>
+          </select>
+          {!categorias.includes(categoria) && (
+            <input
+              className="campo mt-2"
+              autoFocus
+              placeholder="Nome da nova categoria"
+              value={categoria}
+              onChange={(e) => setCategoria(e.target.value)}
+            />
+          )}
         </div>
 
         {linhas.length > 0 && (
