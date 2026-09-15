@@ -81,22 +81,24 @@ export default function ProdutosPage() {
 
     setFazendoUpload(true);
     try {
-      const apiKey = process.env.NEXT_PUBLIC_IMGBB_API_KEY;
-      if (apiKey) {
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME?.trim();
+      const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET?.trim();
+      if (cloudName && uploadPreset) {
         const formData = new FormData();
-        formData.append("image", file);
-        
-        const response = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
-          method: "POST",
-          body: formData,
-        });
-        
+        formData.append("file", file);
+        formData.append("upload_preset", uploadPreset);
+
+        const response = await fetch(
+          `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+          { method: "POST", body: formData },
+        );
+
         const data = await response.json();
-        
-        if (data.success) {
-          setForm({ ...form, imagemUrl: data.data.url });
+
+        if (data.secure_url) {
+          setForm({ ...form, imagemUrl: data.secure_url });
         } else {
-          throw new Error(data.error?.message || "Erro no ImgBB");
+          throw new Error(data.error?.message || "Erro no Cloudinary");
         }
       } else {
         const reader = new FileReader();
@@ -109,7 +111,8 @@ export default function ProdutosPage() {
       }
     } catch (error) {
       console.error("Erro no upload", error);
-      alert("Erro ao fazer upload da imagem.");
+      const motivo = error instanceof Error ? error.message : "";
+      alert(`Erro ao fazer upload da imagem.${motivo ? ` (${motivo})` : ""}`);
     }
     setFazendoUpload(false);
   }

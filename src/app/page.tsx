@@ -5,6 +5,7 @@ import { MessageCircle, Search, ShoppingBag } from "lucide-react";
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
 import { TemaBotao } from "@/components/TemaBotao";
+import { ProdutoImagem } from "@/components/ProdutoImagem";
 import { useDados } from "@/lib/store";
 import { brl, normalizar } from "@/lib/format";
 import { EMPRESA } from "@/lib/empresa";
@@ -156,16 +157,20 @@ export default function CatalogoPage() {
                     className="flex items-center gap-4 px-4 py-4 md:px-6 md:py-5 transition hover:bg-superficie-2"
                   >
                     {/* Emoji / Imagem */}
-                    <div className="flex h-12 w-12 md:h-16 md:w-16 shrink-0 items-center justify-center rounded-xl bg-superficie-2">
+                    <div className="relative flex h-20 w-20 md:h-24 md:w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-superficie-2">
                       {p.imagemUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
+                        <ProdutoImagem
                           src={p.imagemUrl}
                           alt={p.nome}
-                          className="h-full w-full rounded-xl object-contain p-1"
+                          fill
+                          sizes="96px"
+                          className="object-cover"
+                          fallback={
+                            <span className="text-4xl md:text-5xl select-none">🍺</span>
+                          }
                         />
                       ) : (
-                        <span className="text-2xl md:text-3xl select-none">🍺</span>
+                        <span className="text-4xl md:text-5xl select-none">🍺</span>
                       )}
                     </div>
 

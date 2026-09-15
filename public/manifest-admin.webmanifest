@@ -1,0 +1,19 @@
+{
+  "name": "Seu Birita — Admin",
+  "short_name": "Birita Admin",
+  "description": "Painel de pedidos, estoque, clientes e financeiro da Seu Birita Distribuidora.",
+  "start_url": "/admin",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#faf6f0",
+  "theme_color": "#3b1b0e",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

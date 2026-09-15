@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { TemaBotao } from "@/components/TemaBotao";
+import { ProdutoImagem } from "@/components/ProdutoImagem";
 import { useDados, novoId } from "@/lib/store";
 import { brl, normalizar } from "@/lib/format";
 import { EMPRESA } from "@/lib/empresa";
@@ -304,11 +305,13 @@ export default function PedidoPage() {
                   
                   <div className="absolute inset-0 border-b border-black/5 pointer-events-none" />
                   {p.imagemUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    <ProdutoImagem
                       src={p.imagemUrl}
                       alt={p.nome}
-                      className={`relative z-10 h-full w-full ${p.imagemCenario ? "object-cover" : "object-contain p-4 mix-blend-multiply"}`}
+                      fill
+                      sizes="(min-width: 768px) 25vw, (min-width: 640px) 33vw, 50vw"
+                      className={`z-10 ${p.imagemCenario ? "object-cover" : "object-contain p-4 mix-blend-multiply"}`}
+                      fallback={<span className="text-4xl select-none relative z-10">🍺</span>}
                     />
                   ) : (
                     <span className="text-4xl select-none relative z-10">🍺</span>
@@ -774,8 +777,14 @@ export default function PedidoPage() {
               <div className="flex items-center gap-4 mb-4">
                 <div className="h-16 w-16 rounded-xl flex items-center justify-center p-1 border border-borda shrink-0" style={{ background: "radial-gradient(circle at center, #ffffff 0%, #f1f5f9 100%)" }}>
                   {produtoCaixa.imagemUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={produtoCaixa.imagemUrl} alt={produtoCaixa.nome} className="h-full w-full object-contain mix-blend-multiply" />
+                    <ProdutoImagem
+                      src={produtoCaixa.imagemUrl}
+                      alt={produtoCaixa.nome}
+                      width={56}
+                      height={56}
+                      className="h-full w-full object-contain mix-blend-multiply"
+                      fallback={<span className="text-2xl">🍺</span>}
+                    />
                   ) : <span className="text-2xl">🍺</span>}
                 </div>
                 <div>

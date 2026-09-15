@@ -21,6 +21,7 @@ import { Modal } from "./ui";
 import { useDados } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 
+/** Usado tanto na lateral do desktop quanto na barra do celular (com scroll horizontal). */
 const ITENS = [
   { href: "/admin", rotulo: "Início", Icone: Home },
   { href: "/admin/pedidos", rotulo: "Pedidos", Icone: ClipboardList },
@@ -29,10 +30,6 @@ const ITENS = [
   { href: "/admin/produtos", rotulo: "Produtos", Icone: Package },
   { href: "/admin/clientes", rotulo: "Clientes", Icone: Users },
   { href: "/admin/financeiro", rotulo: "Financeiro", Icone: Wallet },
-];
-
-const ITENS_DESKTOP = [
-  ...ITENS,
   { href: "/admin/estoque", rotulo: "Estoque", Icone: Boxes },
   { href: "/admin/fornecedores", rotulo: "Fornecedores", Icone: Truck },
 ];
@@ -68,8 +65,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (precisaEntrar && !publica) router.replace("/login");
   }, [precisaEntrar, publica, router]);
 
-  // Sem a casca do app: login, catálogo público e o relatório imprimível.
-  if (publica || caminho.includes("/relatorio")) {
+  // Sem a casca do app: login, catálogo público e as folhas imprimíveis.
+  if (publica || caminho.includes("/relatorio") || caminho.includes("/romaneio")) {
     return <>{children}</>;
   }
 
@@ -111,7 +108,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
 
           <nav className="flex flex-col gap-1">
-            {ITENS_DESKTOP.map(({ href, rotulo, Icone }) => {
+            {ITENS.map(({ href, rotulo, Icone }) => {
               const ativo = estaAtivo(href, caminho);
               const badge =
                 href === "/pedidos/clientes" && pedidosClientesNovos > 0
@@ -169,8 +166,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Navegação inferior — só no celular */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-7 border-t border-borda bg-superficie pb-[env(safe-area-inset-bottom)] md:hidden">
+      {/* Navegação inferior — só no celular. Rola de lado: são 9 itens, não cabem numa tela só. */}
+      <nav className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t border-borda bg-superficie pb-[env(safe-area-inset-bottom)] [-ms-overflow-style:none] [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden">
         {ITENS.map(({ href, rotulo, Icone }) => {
           const ativo = estaAtivo(href, caminho);
           const badge =
@@ -181,7 +178,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Link
               key={href}
               href={href}
-              className={`relative flex flex-col items-center gap-1 py-2.5 text-[10px] font-semibold transition ${
+              className={`relative flex w-[68px] shrink-0 flex-col items-center gap-1 py-2.5 text-[10px] font-semibold transition ${
                 ativo ? "text-acento" : "text-texto-suave"
               }`}
             >

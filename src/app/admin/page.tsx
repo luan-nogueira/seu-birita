@@ -18,6 +18,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { Cabecalho, StatusChip } from "@/components/ui";
+import { ModalAgendarEvento } from "@/components/ModalAgendarEvento";
 import { useDados } from "@/lib/store";
 import { calcularTotais, lucroTotal } from "@/lib/calc";
 import { brl, dataBR, hojeISO } from "@/lib/format";
@@ -25,6 +26,7 @@ import { brl, dataBR, hojeISO } from "@/lib/format";
 export default function InicioPage() {
   const { pedidos, produtos, clientes, fornecedores, contasPagar, carregando } =
     useDados();
+  const [agendarAberto, setAgendarAberto] = useState(false);
 
   const ativos = pedidos.filter((p) => p.status !== "CANCELADO");
 
@@ -64,11 +66,22 @@ export default function InicioPage() {
             : `${clientes.length} clientes · ${produtos.length} produtos`
         }
         acao={
-          <Link href="/admin/pedidos" className="btn-primario">
-            <Plus className="h-4 w-4" />
-            Novo pedido
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn-primario" onClick={() => setAgendarAberto(true)}>
+              <Plus className="h-4 w-4" />
+              Agendar evento
+            </button>
+            <Link href="/admin/pedidos" className="btn-primario">
+              <Plus className="h-4 w-4" />
+              Novo pedido
+            </Link>
+          </div>
         }
+      />
+
+      <ModalAgendarEvento
+        aberto={agendarAberto}
+        aoFechar={() => setAgendarAberto(false)}
       />
 
       <div className="space-y-6 px-4 md:px-6">

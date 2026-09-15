@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Cabecalho } from "@/components/ui";
+import { ModalAgendarEvento } from "@/components/ModalAgendarEvento";
 import { useDados } from "@/lib/store";
-import { Calendar, MapPin, Phone, Package, Info } from "lucide-react";
+import { Calendar, MapPin, Phone, Package, Info, Plus } from "lucide-react";
 
 export default function AgendaPage() {
   const { pedidosClientes } = useDados();
+  const [agendarAberto, setAgendarAberto] = useState(false);
 
   const eventos = useMemo(() => {
     return pedidosClientes
@@ -50,6 +52,17 @@ export default function AgendaPage() {
             ? "Nenhum evento agendado"
             : `${eventos.length} evento(s) agendado(s)`
         }
+        acao={
+          <button className="btn-primario" onClick={() => setAgendarAberto(true)}>
+            <Plus className="h-4 w-4" />
+            Agendar evento
+          </button>
+        }
+      />
+
+      <ModalAgendarEvento
+        aberto={agendarAberto}
+        aoFechar={() => setAgendarAberto(false)}
       />
 
       <div className="mx-auto max-w-4xl px-4 py-6 md:px-6">

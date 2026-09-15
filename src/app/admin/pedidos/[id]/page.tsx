@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Check,
+  ClipboardList,
   CloudUpload,
   FileText,
   Layers,
@@ -192,6 +193,14 @@ export default function PedidoPage() {
           </div>
 
           <IndicadorSalvamento salvando={salvando} />
+
+          <Link
+            href={`/admin/pedidos/${pedido.id}/romaneio`}
+            className="btn-secundario shrink-0 px-3"
+          >
+            <ClipboardList className="h-4 w-4" />
+            <span className="hidden sm:inline">Romaneio</span>
+          </Link>
 
           <Link
             href={`/admin/pedidos/${pedido.id}/relatorio`}
@@ -835,6 +844,18 @@ function SeletorProdutos({
       );
   }, [produtos, jaNoPedido, busca]);
 
+  const porCategoria = useMemo(() => {
+    const mapa = new Map<string, typeof disponiveis>();
+    for (const p of disponiveis) {
+      const chave = p.categoria || "Sem categoria";
+      if (!mapa.has(chave)) mapa.set(chave, []);
+      mapa.get(chave)!.push(p);
+    }
+    return Array.from(mapa.entries()).sort(([a], [b]) =>
+      a.localeCompare(b, "pt-BR"),
+    );
+  }, [disponiveis]);
+
   function alternar(id: string) {
     setMarcados((s) => {
       const novo = new Set(s);
@@ -902,32 +923,42 @@ function SeletorProdutos({
               : "Todos os produtos já estão neste pedido."}
           </p>
         ) : (
-          <ul className="divide-y divide-borda">
-            {disponiveis.map((p) => (
-              <li key={p.id}>
-                <label className="flex cursor-pointer items-center gap-3 py-2.5">
-                  <input
-                    type="checkbox"
-                    className="h-5 w-5 shrink-0 accent-[var(--acento)]"
-                    checked={marcados.has(p.id)}
-                    onChange={() => alternar(p.id)}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold">
-                      {p.nome}
-                    </span>
-                    <span className="block text-xs text-texto-suave">
-                      {p.categoria}
-                      {p.unPorCaixa > 1 && ` · ${p.unPorCaixa} un/cx`}
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-sm font-bold tabular-nums">
-                    {brl(p.precoUn)}
-                  </span>
-                </label>
-              </li>
+          <div className="space-y-4">
+            {porCategoria.map(([categoria, itens]) => (
+              <div key={categoria}>
+                <p className="sticky top-0 -mx-1 bg-superficie px-1 py-1 text-[11px] font-black tracking-wide text-texto-suave uppercase">
+                  {categoria}
+                </p>
+                <ul className="divide-y divide-borda">
+                  {itens.map((p) => (
+                    <li key={p.id}>
+                      <label className="flex cursor-pointer items-center gap-3 py-2.5">
+                        <input
+                          type="checkbox"
+                          className="h-5 w-5 shrink-0 accent-[var(--acento)]"
+                          checked={marcados.has(p.id)}
+                          onChange={() => alternar(p.id)}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-semibold">
+                            {p.nome}
+                          </span>
+                          {p.unPorCaixa > 1 && (
+                            <span className="block text-xs text-texto-suave">
+                              {p.unPorCaixa} un/cx
+                            </span>
+                          )}
+                        </span>
+                        <span className="shrink-0 text-sm font-bold tabular-nums">
+                          {brl(p.precoUn)}
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </Modal>
     </>
