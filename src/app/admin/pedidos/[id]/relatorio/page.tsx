@@ -30,7 +30,7 @@ export default function RelatorioPage() {
     return (
       <div className="p-8">
         <p className="font-bold">Pedido não encontrado.</p>
-        <Link href="/pedidos" className="btn-secundario mt-4">
+        <Link href="/admin/pedidos" className="btn-secundario mt-4">
           <ArrowLeft className="h-4 w-4" />
           Voltar
         </Link>
@@ -50,7 +50,7 @@ export default function RelatorioPage() {
       {/* Barra de ações — não sai no papel */}
       <div className="nao-imprimir sticky top-0 z-10 flex items-center gap-2 border-b border-black/10 bg-barra px-4 py-3 text-barra-texto">
         <Link
-          href={`/pedidos/${pedido.id}`}
+          href={`/admin/pedidos/${pedido.id}`}
           className="grid h-9 w-9 place-items-center rounded-lg transition hover:bg-white/10"
           aria-label="Voltar ao pedido"
         >

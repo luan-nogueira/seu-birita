@@ -5,6 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { SCRIPT_TEMA } from "@/components/TemaBotao";
 import { DadosProvider } from "@/lib/store";
 import { AuthProvider } from "@/lib/auth";
+import { PwaRegistry } from "@/components/PwaRegistry";
 import Script from "next/script";
 
 const inter = Inter({
@@ -41,6 +42,7 @@ export default function RootLayout({
       <head>
       </head>
       <body className={inter.variable}>
+        <PwaRegistry />
         <Script id="tema-script" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: SCRIPT_TEMA }} />
         <AuthProvider>
           <DadosProvider>

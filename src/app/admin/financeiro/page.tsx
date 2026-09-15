@@ -1,12 +1,23 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { TrendingUp, Wallet } from "lucide-react";
-import { Cabecalho } from "@/components/ui";
-import { useDados } from "@/lib/store";
-import { calcularTotais } from "@/lib/calc";
-import { brl, dataBR } from "@/lib/format";
+import {
+  CheckCircle2,
+  Circle,
+  Pencil,
+  PiggyBank,
+  Plus,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
+import { Cabecalho, Modal } from "@/components/ui";
+import { useDados, novoId } from "@/lib/store";
+import { calcularTotais, lucroTotal } from "@/lib/calc";
+import { brl, dataBR, hojeISO, paraCampo, paraNumero } from "@/lib/format";
+import type { ContaPagar } from "@/lib/types";
 
 const ROTULO_FORMA: Record<string, string> = {
   PIX: "Pix",
@@ -16,24 +27,63 @@ const ROTULO_FORMA: Record<string, string> = {
   TRANSFERENCIA: "Transferência",
 };
 
+type Formulario = {
+  descricao: string;
+  fornecedorId: string;
+  valor: string;
+  vencimento: string;
+  obs: string;
+};
+
+const FORM_VAZIO: Formulario = {
+  descricao: "",
+  fornecedorId: "",
+  valor: "",
+  vencimento: hojeISO(),
+  obs: "",
+};
+
 export default function FinanceiroPage() {
-  const { pedidos, pagamentos, clientes, carregando } = useDados();
+  const {
+    pedidos,
+    pagamentos,
+    clientes,
+    fornecedores,
+    contasPagar,
+    salvarContaPagar,
+    removerContaPagar,
+    carregando,
+  } = useDados();
 
   const ativos = useMemo(
     () => pedidos.filter((p) => p.status !== "CANCELADO" && p.status !== "RASCUNHO"),
     [pedidos],
   );
 
-  const mesAtual = new Date().toISOString().slice(0, 7);
+  const [mesFiltro, setMesFiltro] = useState(() => new Date().toISOString().slice(0, 7));
 
   const recebidoMes = pagamentos
-    .filter((p) => p.data.startsWith(mesAtual))
+    .filter((p) => p.data.startsWith(mesFiltro))
     .reduce((s, p) => s + p.valor, 0);
+
+  const pedidosDoMes = useMemo(
+    () => ativos.filter((p) => p.dataEvento.startsWith(mesFiltro)),
+    [ativos, mesFiltro],
+  );
+  const lucroMes = lucroTotal(pedidosDoMes);
 
   const aReceber = ativos.reduce(
     (s, p) => s + Math.max(0, calcularTotais(p).saldoAberto),
     0,
   );
+
+  const hoje = hojeISO();
+  const contasPendentes = useMemo(
+    () => contasPagar.filter((c) => !c.pago),
+    [contasPagar],
+  );
+  const aPagar = contasPendentes.reduce((s, c) => s + c.valor, 0);
+  const contasVencidas = contasPendentes.filter((c) => c.vencimento < hoje);
 
   /** Quanto cada cliente deve, somando os pedidos em aberto. */
   const porCliente = useMemo(() => {
@@ -65,15 +115,82 @@ export default function FinanceiroPage() {
     [pagamentos],
   );
 
+  const contasOrdenadas = useMemo(
+    () =>
+      [...contasPagar].sort((a, b) => {
+        if (a.pago !== b.pago) return a.pago ? 1 : -1;
+        return a.vencimento.localeCompare(b.vencimento);
+      }),
+    [contasPagar],
+  );
+
+  // ------------------------- Modal de contas a pagar -------------------------
+  const [editando, setEditando] = useState<ContaPagar | null>(null);
+  const [form, setForm] = useState<Formulario>(FORM_VAZIO);
+  const [aberto, setAberto] = useState(false);
+  const [excluindo, setExcluindo] = useState<ContaPagar | null>(null);
+
+  function abrirNova() {
+    setEditando(null);
+    setForm(FORM_VAZIO);
+    setAberto(true);
+  }
+
+  function abrirEdicao(c: ContaPagar) {
+    setEditando(c);
+    setForm({
+      descricao: c.descricao,
+      fornecedorId: c.fornecedorId ?? "",
+      valor: paraCampo(c.valor),
+      vencimento: c.vencimento,
+      obs: c.obs ?? "",
+    });
+    setAberto(true);
+  }
+
+  async function salvar() {
+    const descricao = form.descricao.trim();
+    const valor = paraNumero(form.valor);
+    if (!descricao || valor <= 0) return;
+    const fornecedor = fornecedores.find((f) => f.id === form.fornecedorId);
+    await salvarContaPagar({
+      id: editando?.id ?? novoId(),
+      descricao,
+      fornecedorId: fornecedor?.id,
+      fornecedorNome: fornecedor?.nome,
+      valor,
+      vencimento: form.vencimento || hojeISO(),
+      obs: form.obs.trim() || undefined,
+      pago: editando?.pago ?? false,
+      pagoEm: editando?.pagoEm,
+      criadoEm: editando?.criadoEm ?? new Date().toISOString(),
+    });
+    setAberto(false);
+  }
+
+  async function alternarPago(c: ContaPagar) {
+    await salvarContaPagar({
+      ...c,
+      pago: !c.pago,
+      pagoEm: !c.pago ? new Date().toISOString() : undefined,
+    });
+  }
+
+  async function confirmarExclusao() {
+    if (!excluindo) return;
+    await removerContaPagar(excluindo.id);
+    setExcluindo(null);
+  }
+
   return (
     <>
       <Cabecalho
         titulo="Financeiro"
-        subtitulo={carregando ? "Carregando…" : "Recebimentos e contas em aberto"}
+        subtitulo={carregando ? "Carregando…" : "Recebimentos e contas a pagar"}
       />
 
       <div className="space-y-6 px-4 md:px-6">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           <div className="card border-acento/40 bg-acento/5 px-4 py-3">
             <div className="flex items-center gap-1.5 text-texto-suave">
               <Wallet className="h-3.5 w-3.5" />
@@ -91,6 +208,23 @@ export default function FinanceiroPage() {
 
           <div className="card px-4 py-3">
             <div className="flex items-center gap-1.5 text-texto-suave">
+              <TrendingDown className="h-3.5 w-3.5" />
+              <p className="text-[11px] font-semibold tracking-wide uppercase">
+                A pagar
+              </p>
+            </div>
+            <p className="mt-1.5 text-2xl font-black tabular-nums">
+              {brl(aPagar)}
+            </p>
+            <p className="mt-0.5 text-xs text-texto-suave">
+              {contasVencidas.length > 0
+                ? `${contasVencidas.length} vencida(s)`
+                : `${contasPendentes.length} pendente(s)`}
+            </p>
+          </div>
+
+          <div className="card px-4 py-3">
+            <div className="flex items-center gap-1.5 text-texto-suave">
               <TrendingUp className="h-3.5 w-3.5" />
               <p className="text-[11px] font-semibold tracking-wide uppercase">
                 Recebido no mês
@@ -99,11 +233,28 @@ export default function FinanceiroPage() {
             <p className="mt-1.5 text-2xl font-black tabular-nums">
               {brl(recebidoMes)}
             </p>
+            <div className="mt-0.5 text-xs text-texto-suave">
+              <input
+                type="month"
+                value={mesFiltro}
+                onChange={(e) => setMesFiltro(e.target.value)}
+                className="bg-transparent outline-none cursor-pointer w-full text-texto-suave"
+              />
+            </div>
+          </div>
+
+          <div className="card px-4 py-3">
+            <div className="flex items-center gap-1.5 text-texto-suave">
+              <PiggyBank className="h-3.5 w-3.5" />
+              <p className="text-[11px] font-semibold tracking-wide uppercase">
+                Lucro no mês
+              </p>
+            </div>
+            <p className="mt-1.5 text-2xl font-black tabular-nums">
+              {brl(lucroMes)}
+            </p>
             <p className="mt-0.5 text-xs text-texto-suave">
-              {new Date().toLocaleDateString("pt-BR", {
-                month: "long",
-                year: "numeric",
-              })}
+              {pedidosDoMes.length} evento(s) no mês
             </p>
           </div>
         </div>
@@ -122,7 +273,7 @@ export default function FinanceiroPage() {
               {porCliente.map((c) => (
                 <li key={c.id}>
                   <Link
-                    href={`/pedidos?cliente=${c.id}`}
+                    href={`/admin/pedidos?cliente=${c.id}`}
                     className="flex items-center gap-3 px-4 py-3 transition hover:bg-superficie-2"
                   >
                     <div className="min-w-0 flex-1">
@@ -137,6 +288,87 @@ export default function FinanceiroPage() {
                   </Link>
                 </li>
               ))}
+            </ul>
+          )}
+        </section>
+
+        <section>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-sm font-bold">Contas a pagar</h2>
+            <button className="btn-secundario" onClick={abrirNova}>
+              <Plus className="h-4 w-4" />
+              Nova conta
+            </button>
+          </div>
+          {contasOrdenadas.length === 0 ? (
+            <div className="card px-6 py-10 text-center text-sm text-texto-suave">
+              Nenhuma conta lançada. Cadastre compras, aluguel, combustível e
+              outras despesas pra acompanhar o que precisa ser pago.
+            </div>
+          ) : (
+            <ul className="card divide-y divide-borda overflow-hidden">
+              {contasOrdenadas.map((c) => {
+                const vencida = !c.pago && c.vencimento < hoje;
+                return (
+                  <li key={c.id} className="flex items-center gap-3 px-4 py-3">
+                    <button
+                      onClick={() => alternarPago(c)}
+                      className="shrink-0 text-texto-suave transition hover:text-acento"
+                      aria-label={c.pago ? "Marcar como pendente" : "Marcar como paga"}
+                    >
+                      {c.pago ? (
+                        <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                      ) : (
+                        <Circle className="h-5 w-5" />
+                      )}
+                    </button>
+
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`truncate font-semibold ${c.pago ? "text-texto-suave line-through" : ""}`}
+                      >
+                        {c.descricao}
+                      </p>
+                      <p className="text-xs text-texto-suave">
+                        {c.fornecedorNome ? `${c.fornecedorNome} · ` : ""}
+                        {c.pago
+                          ? `paga em ${dataBR(c.pagoEm ?? c.vencimento)}`
+                          : `vence ${dataBR(c.vencimento)}`}
+                        {vencida && " · vencida"}
+                      </p>
+                    </div>
+
+                    <span
+                      className={`shrink-0 font-black tabular-nums ${
+                        c.pago
+                          ? "text-texto-suave"
+                          : vencida
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-acento"
+                      }`}
+                    >
+                      {brl(c.valor)}
+                    </span>
+
+                    <div className="flex shrink-0 gap-1">
+                      <button
+                        className="grid h-8 w-8 place-items-center rounded-lg text-texto-suave transition hover:bg-superficie-2 hover:text-texto"
+                        onClick={() => abrirEdicao(c)}
+                        aria-label={`Editar ${c.descricao}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        className="grid h-8 w-8 place-items-center rounded-lg text-texto-suave transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                        onClick={() => setExcluindo(c)}
+                        aria-label={`Excluir ${c.descricao}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
@@ -179,6 +411,122 @@ export default function FinanceiroPage() {
           )}
         </section>
       </div>
+
+      <Modal
+        aberto={aberto}
+        aoFechar={() => setAberto(false)}
+        titulo={editando ? "Editar conta a pagar" : "Nova conta a pagar"}
+        rodape={
+          <>
+            <button className="btn-secundario" onClick={() => setAberto(false)}>
+              Cancelar
+            </button>
+            <button
+              className="btn-primario"
+              onClick={salvar}
+              disabled={!form.descricao.trim() || paraNumero(form.valor) <= 0}
+            >
+              Salvar
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="rotulo" htmlFor="cp-desc">
+              Descrição
+            </label>
+            <input
+              id="cp-desc"
+              className="campo"
+              autoFocus
+              placeholder="Ex: Compra de bebidas, aluguel do galpão…"
+              value={form.descricao}
+              onChange={(e) => setForm({ ...form, descricao: e.target.value })}
+            />
+          </div>
+
+          <div>
+            <label className="rotulo" htmlFor="cp-fornecedor">
+              Fornecedor (opcional)
+            </label>
+            <select
+              id="cp-fornecedor"
+              className="campo"
+              value={form.fornecedorId}
+              onChange={(e) => setForm({ ...form, fornecedorId: e.target.value })}
+            >
+              <option value="">Sem fornecedor</option>
+              {fornecedores.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="rotulo" htmlFor="cp-valor">
+                Valor
+              </label>
+              <input
+                id="cp-valor"
+                className="campo"
+                inputMode="decimal"
+                placeholder="0,00"
+                value={form.valor}
+                onChange={(e) => setForm({ ...form, valor: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="rotulo" htmlFor="cp-venc">
+                Vencimento
+              </label>
+              <input
+                id="cp-venc"
+                type="date"
+                className="campo"
+                value={form.vencimento}
+                onChange={(e) => setForm({ ...form, vencimento: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="rotulo" htmlFor="cp-obs">
+              Observações
+            </label>
+            <textarea
+              id="cp-obs"
+              className="campo min-h-20"
+              value={form.obs}
+              onChange={(e) => setForm({ ...form, obs: e.target.value })}
+            />
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        aberto={!!excluindo}
+        aoFechar={() => setExcluindo(null)}
+        titulo="Excluir conta a pagar"
+        rodape={
+          <>
+            <button className="btn-secundario" onClick={() => setExcluindo(null)}>
+              Cancelar
+            </button>
+            <button className="btn-perigo" onClick={confirmarExclusao}>
+              Excluir
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-texto-suave">
+          {excluindo &&
+            `Tem certeza que deseja excluir a conta "${excluindo.descricao}"?`}
+        </p>
+      </Modal>
     </>
   );
 }

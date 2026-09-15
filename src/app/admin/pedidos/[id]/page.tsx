@@ -113,7 +113,7 @@ export default function PedidoPage() {
     return (
       <div className="p-6">
         <p className="font-bold">Pedido não encontrado.</p>
-        <Link href="/pedidos" className="btn-secundario mt-4">
+        <Link href="/admin/pedidos" className="btn-secundario mt-4">
           <ArrowLeft className="h-4 w-4" />
           Voltar
         </Link>
@@ -164,7 +164,7 @@ export default function PedidoPage() {
 
   async function confirmarExclusaoPedido() {
     await removerPedido(pedido!.id);
-    router.push("/pedidos");
+    router.push("/admin/pedidos");
   }
 
   return (
@@ -173,7 +173,7 @@ export default function PedidoPage() {
       <div className="sticky top-0 z-20 border-b border-borda bg-fundo/95 backdrop-blur md:top-0">
         <div className="flex items-center gap-2 px-4 py-3 md:px-6">
           <Link
-            href="/pedidos"
+            href="/admin/pedidos"
             className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-texto-suave transition hover:bg-superficie-2 hover:text-texto"
             aria-label="Voltar para a lista"
           >
@@ -194,7 +194,7 @@ export default function PedidoPage() {
           <IndicadorSalvamento salvando={salvando} />
 
           <Link
-            href={`/pedidos/${pedido.id}/relatorio`}
+            href={`/admin/pedidos/${pedido.id}/relatorio`}
             className="btn-primario shrink-0 px-3"
           >
             <FileText className="h-4 w-4" />
@@ -436,19 +436,17 @@ function Resumo({
         </p>
       </div>
 
-      {pedido.status === "FINALIZADO" || pedido.status === "ACERTO" ? (
-        <div className="card px-4 py-3 border-emerald-500/40 bg-emerald-500/10 col-span-2 lg:col-span-1">
-          <p className="text-[11px] font-semibold tracking-wide text-emerald-800 dark:text-emerald-400 uppercase">
-            Lucro do Evento
-          </p>
-          <p className="mt-1 text-xl font-black tabular-nums text-emerald-700 dark:text-emerald-500">
-            {brl(totais.lucro)}
-          </p>
-          <p className="mt-0.5 text-xs text-emerald-600/80 dark:text-emerald-500/80">
-            Custo total: {brl(totais.custoTotal)}
-          </p>
-        </div>
-      ) : null}
+      <div className="card px-4 py-3 border-emerald-500/40 bg-emerald-500/10 col-span-2 lg:col-span-1">
+        <p className="text-[11px] font-semibold tracking-wide text-emerald-800 dark:text-emerald-400 uppercase">
+          {pedido.status === "FINALIZADO" || pedido.status === "ACERTO" ? "Lucro do Evento" : "Lucro Previsto"}
+        </p>
+        <p className="mt-1 text-xl font-black tabular-nums text-emerald-700 dark:text-emerald-500">
+          {brl(totais.lucro)}
+        </p>
+        <p className="mt-0.5 text-xs text-emerald-600/80 dark:text-emerald-500/80">
+          Custo total: {brl(totais.custoTotal)}
+        </p>
+      </div>
     </div>
   );
 }

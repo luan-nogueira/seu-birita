@@ -221,7 +221,7 @@ export default function ClientesPage() {
 
               {totalPedidos > 0 && (
                 <Link
-                  href={`/pedidos?cliente=${c.id}`}
+                  href={`/admin/pedidos?cliente=${c.id}`}
                   className="mt-3 inline-block text-xs font-semibold text-acento underline-offset-4 hover:underline"
                 >
                   Ver pedidos deste cliente →

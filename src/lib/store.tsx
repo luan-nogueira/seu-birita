@@ -13,6 +13,7 @@ import { calcularTotais } from "./calc";
 import { useAuth } from "./auth";
 import type {
   Cliente,
+  ContaPagar,
   EstoqueMovimento,
   Fornecedor,
   Pagamento,
@@ -29,6 +30,7 @@ interface Dados {
   pagamentos: Pagamento[];
   movimentos: EstoqueMovimento[];
   pedidosClientes: PedidoCliente[];
+  contasPagar: ContaPagar[];
   /** Quantidade de pedidos com status NOVO — para o badge da navegação */
   pedidosClientesNovos: number;
   carregando: boolean;
@@ -47,6 +49,8 @@ interface Dados {
   salvarMovimento: (m: EstoqueMovimento) => Promise<void>;
   salvarPedidoCliente: (p: PedidoCliente) => Promise<void>;
   removerPedidoCliente: (id: string) => Promise<void>;
+  salvarContaPagar: (c: ContaPagar) => Promise<void>;
+  removerContaPagar: (id: string) => Promise<void>;
 
   proximoNumeroPedido: () => number;
   proximoNumeroPedidoCliente: () => number;
@@ -139,6 +143,7 @@ export function DadosProvider({ children }: { children: React.ReactNode }) {
   const pagamentos = useColecaoProtegida<Pagamento>("pagamentos", marcarPronta, logado);
   const movimentos = useColecaoProtegida<EstoqueMovimento>("movimentos", marcarPronta, logado);
   const pedidosClientes = useColecaoProtegida<PedidoCliente>("pedidosClientes", marcarPronta, logado);
+  const contasPagar = useColecaoProtegida<ContaPagar>("contasPagar", marcarPronta, logado);
 
   const valor = useMemo<Dados>(() => {
     const produtosOrdenados = [...produtos].sort((a, b) =>
@@ -171,9 +176,12 @@ export function DadosProvider({ children }: { children: React.ReactNode }) {
       ),
       pedidosClientesNovos: pedidosClientes.filter((p) => p.status === "NOVO")
         .length,
-      // Aguarda: auth resolvida + 7 coleções respondidas.
+      contasPagar: [...contasPagar].sort((a, b) =>
+        a.vencimento.localeCompare(b.vencimento),
+      ),
+      // Aguarda: auth resolvida + 8 coleções respondidas.
       // Em modo demonstração authCarregando é sempre false.
-      carregando: authCarregando || prontas < 7,
+      carregando: authCarregando || prontas < 8,
       modoDemonstracao,
 
       salvarProduto: salvarEm<Produto>("produtos"),
@@ -189,6 +197,8 @@ export function DadosProvider({ children }: { children: React.ReactNode }) {
       salvarMovimento: salvarEm<EstoqueMovimento>("movimentos"),
       salvarPedidoCliente: salvarEm<PedidoCliente>("pedidosClientes"),
       removerPedidoCliente: removerDe("pedidosClientes"),
+      salvarContaPagar: salvarEm<ContaPagar>("contasPagar"),
+      removerContaPagar: removerDe("contasPagar"),
 
       proximoNumeroPedido: () =>
         pedidos.reduce((max, p) => Math.max(max, p.numero || 0), 0) + 1,
@@ -209,7 +219,7 @@ export function DadosProvider({ children }: { children: React.ReactNode }) {
           )
           .reduce((soma, p) => soma + calcularTotais(p).saldoAberto, 0),
     };
-  }, [authCarregando, produtos, clientes, fornecedores, pedidos, pagamentos, movimentos, pedidosClientes, prontas]);
+  }, [authCarregando, produtos, clientes, fornecedores, pedidos, pagamentos, movimentos, pedidosClientes, contasPagar, prontas]);
 
   return <DadosContext.Provider value={valor}>{children}</DadosContext.Provider>;
 }

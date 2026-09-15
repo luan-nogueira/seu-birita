@@ -84,7 +84,7 @@ export default function EstoquePage() {
         const comprasAnteriores = movimentos
           .filter(m => m.produtoId === produtoId && m.origem === "COMPRA" && m.custoUn !== undefined)
           .sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
-          .slice(0, 3); // Pegar as últimas 3 antes dessa nova
+          .slice(0, 2); // Pegar as últimas 2 antes dessa nova (totalizando 3)
 
         let totalSoma = qtd * custoUn;
         let totalQtd = qtd;

@@ -141,7 +141,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           <div className="mt-auto pt-4">
             <Link
-              href="/catalogo"
+              href="/"
               target="_blank"
               className="block px-2 text-xs font-semibold text-creme/60 underline-offset-4 hover:text-creme hover:underline"
             >

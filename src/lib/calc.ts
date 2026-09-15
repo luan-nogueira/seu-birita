@@ -102,6 +102,11 @@ export function calcularTotais(pedido: Pedido): TotaisPedido {
   };
 }
 
+/** Soma o lucro (calcularTotais) de uma lista de pedidos. */
+export function lucroTotal(pedidos: Pedido[]): number {
+  return pedidos.reduce((soma, p) => soma + calcularTotais(p).lucro, 0);
+}
+
 /** Cria um item zerado a partir de um produto. */
 export function novoItem(produto: {
   id: string;

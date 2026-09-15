@@ -82,7 +82,7 @@ function ConteudoPedidos() {
       <div className="px-4 md:px-6">
         {cliente && (
           <Link
-            href="/pedidos"
+            href="/admin/pedidos"
             className="mb-3 inline-block text-xs font-semibold text-acento underline-offset-4 hover:underline"
           >
             ← Ver todos os pedidos
@@ -127,7 +127,7 @@ function ConteudoPedidos() {
           }
           acao={
             clientes.length === 0 ? (
-              <Link href="/clientes" className="btn-primario">
+              <Link href="/admin/clientes" className="btn-primario">
                 Cadastrar cliente
               </Link>
             ) : (
@@ -165,7 +165,7 @@ function CartaoPedido({ pedido }: { pedido: Pedido }) {
   return (
     <li>
       <Link
-        href={`/pedidos/${pedido.id}`}
+        href={`/admin/pedidos/${pedido.id}`}
         className="card block p-4 transition hover:border-borda-forte hover:bg-superficie-2"
       >
         <div className="flex items-start gap-3">
@@ -291,7 +291,7 @@ function ModalNovoPedido({
 
     setCriando(false);
     aoFechar();
-    router.push(`/pedidos/${id}`);
+    router.push(`/admin/pedidos/${id}`);
   }
 
   return (

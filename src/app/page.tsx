@@ -56,12 +56,12 @@ export default function CatalogoPage() {
     <div className="min-h-dvh bg-fundo">
       {/* ─── Header ─── */}
       <header className="bg-barra px-5 py-10 text-center text-barra-texto">
-        <div className="mx-auto flex max-w-3xl flex-col items-center">
-          <Logo className="h-28 w-auto" variante="clara" />
-          <p className="mt-3 text-sm font-semibold text-creme/80">
+        <div className="mx-auto flex max-w-4xl flex-col items-center">
+          <Logo className="h-32 w-auto md:h-40" variante="clara" />
+          <p className="mt-4 text-base font-semibold text-creme/80 md:text-lg">
             Tabela de preços
           </p>
-          <p className="mt-1 text-xs text-creme/60">
+          <p className="mt-1 text-sm text-creme/60">
             Atualizada em{" "}
             {new Date().toLocaleDateString("pt-BR", {
               day: "2-digit",
@@ -74,21 +74,21 @@ export default function CatalogoPage() {
           <Link
             href="/pedido"
             id="btn-fazer-pedido-online"
-            className="mt-5 inline-flex items-center gap-2 rounded-2xl bg-ouro-500 px-6 py-3 font-bold text-marrom-900 shadow-lg transition hover:bg-ouro-400 active:scale-95"
+            className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-ouro-500 px-8 py-4 text-lg font-bold text-marrom-900 shadow-lg transition hover:bg-ouro-400 active:scale-95"
           >
-            <ShoppingBag className="h-5 w-5" />
+            <ShoppingBag className="h-6 w-6" />
             Fazer pedido online
           </Link>
         </div>
       </header>
 
-      <div className="mx-auto max-w-3xl px-4 py-6">
+      <div className="mx-auto max-w-4xl px-4 py-8 md:py-10">
         {/* Busca */}
-        <div className="relative mb-4">
-          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-texto-suave" />
+        <div className="relative mb-6">
+          <Search className="pointer-events-none absolute top-1/2 left-4 h-5 w-5 -translate-y-1/2 text-texto-suave" />
           <input
             id="busca-catalogo"
-            className="campo pl-9"
+            className="campo pl-11 text-base md:text-lg py-3"
             placeholder="Buscar bebida…"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
@@ -96,11 +96,11 @@ export default function CatalogoPage() {
         </div>
 
         {/* Filtros de categoria */}
-        <div className="mb-6 flex gap-2 overflow-x-auto pb-1">
+        <div className="mb-8 flex gap-3 overflow-x-auto pb-2">
           <button
             type="button"
             onClick={() => setCategoriaAtiva(null)}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+            className={`shrink-0 rounded-full px-4 py-2 text-sm md:text-base font-semibold transition ${
               !categoriaAtiva
                 ? "bg-acento text-acento-texto"
                 : "border border-borda text-texto-suave hover:border-acento hover:text-acento"
@@ -115,7 +115,7 @@ export default function CatalogoPage() {
               onClick={() =>
                 setCategoriaAtiva(cat === categoriaAtiva ? null : cat)
               }
-              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+              className={`shrink-0 rounded-full px-4 py-2 text-sm md:text-base font-semibold transition ${
                 categoriaAtiva === cat
                   ? "bg-acento text-acento-texto"
                   : "border border-borda text-texto-suave hover:border-acento hover:text-acento"
@@ -140,12 +140,12 @@ export default function CatalogoPage() {
           </p>
         )}
 
-        <div className="space-y-8">
+        <div className="space-y-10">
           {porCategoria.map(([categoria, itens]) => (
             <section key={categoria}>
-              <h2 className="mb-3 flex items-center gap-2 border-b-2 border-ouro-500 pb-1.5 text-sm font-black tracking-wide uppercase">
+              <h2 className="mb-4 flex items-center gap-2 border-b-2 border-ouro-500 pb-2 text-base md:text-lg font-black tracking-wide uppercase">
                 <span className="flex-1">{categoria}</span>
-                <span className="text-xs font-semibold text-texto-suave normal-case tracking-normal">
+                <span className="text-sm font-semibold text-texto-suave normal-case tracking-normal">
                   {itens.length} produto(s)
                 </span>
               </h2>
@@ -153,10 +153,10 @@ export default function CatalogoPage() {
                 {itens.map((p) => (
                   <li
                     key={p.id}
-                    className="flex items-center gap-3 px-4 py-3 transition hover:bg-superficie-2"
+                    className="flex items-center gap-4 px-4 py-4 md:px-6 md:py-5 transition hover:bg-superficie-2"
                   >
                     {/* Emoji / Imagem */}
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-superficie-2">
+                    <div className="flex h-12 w-12 md:h-16 md:w-16 shrink-0 items-center justify-center rounded-xl bg-superficie-2">
                       {p.imagemUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -165,27 +165,27 @@ export default function CatalogoPage() {
                           className="h-full w-full rounded-xl object-contain p-1"
                         />
                       ) : (
-                        <span className="text-xl select-none">🍺</span>
+                        <span className="text-2xl md:text-3xl select-none">🍺</span>
                       )}
                     </div>
 
-                    <span className="min-w-0 flex-1 font-semibold">
+                    <span className="min-w-0 flex-1 text-lg md:text-xl font-bold">
                       {p.nome}
                     </span>
 
                     {p.unPorCaixa > 1 && (
-                      <span className="shrink-0 text-right text-xs text-texto-suave">
+                      <span className="shrink-0 text-right text-sm md:text-base text-texto-suave">
                         cx c/ {p.unPorCaixa}
                         <br />
                         {brl(p.precoUn * p.unPorCaixa)}
                       </span>
                     )}
 
-                    <div className="w-20 shrink-0 text-right">
-                      <span className="font-black tabular-nums text-acento">
+                    <div className="w-24 md:w-28 shrink-0 text-right">
+                      <span className="text-lg md:text-xl font-black tabular-nums text-acento">
                         {brl(p.precoUn)}
                       </span>
-                      <span className="block text-[10px] font-normal text-texto-suave">
+                      <span className="block text-xs md:text-sm font-normal text-texto-suave">
                         unidade
                       </span>
                     </div>

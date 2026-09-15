@@ -26,6 +26,7 @@ service cloud.firestore {
     match /pedidos/{doc}      { allow read, write: if logado(); }
     match /pagamentos/{doc}   { allow read, write: if logado(); }
     match /movimentos/{doc}   { allow read, write: if logado(); }
+    match /contasPagar/{doc}  { allow read, write: if logado(); }
 
     // Pedidos feitos pelo cliente na página pública (/pedido).
     // Qualquer um pode criar (anônimo) — é o fluxo normal de pedido público.

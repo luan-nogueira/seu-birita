@@ -17,7 +17,7 @@ import { Cabecalho, Modal, Vazio } from "@/components/ui";
 import { useDados, novoId } from "@/lib/store";
 import { firebaseConfigurado } from "@/lib/firebase";
 import { brl, normalizar, paraCampo, paraNumero } from "@/lib/format";
-import { CATEGORIAS_PADRAO } from "@/lib/db/seed";
+import { CATEGORIAS_PADRAO, semearProdutos } from "@/lib/db/seed";
 import type { Produto } from "@/lib/types";
 
 type Formulario = {
@@ -56,6 +56,24 @@ export default function ProdutosPage() {
   const [importAberto, setImportAberto] = useState(false);
   const [fazendoUpload, setFazendoUpload] = useState(false);
   const [excluindoProduto, setExcluindoProduto] = useState<Produto | null>(null);
+  const [recuperando, setRecuperando] = useState(false);
+
+  async function recuperarIniciais() {
+    if (!confirm("Isso vai adicionar as 35 bebidas da versão de demonstração. Continuar?")) return;
+    setRecuperando(true);
+    try {
+      const iniciais = semearProdutos();
+      for (const p of iniciais) {
+        await salvarProduto(p);
+      }
+      alert("Produtos recuperados com sucesso!");
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao recuperar produtos.");
+    } finally {
+      setRecuperando(false);
+    }
+  }
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -63,16 +81,23 @@ export default function ProdutosPage() {
 
     setFazendoUpload(true);
     try {
-      if (firebaseConfigurado) {
-        const { getFirebaseStorage } = await import("@/lib/firebase");
-        const { ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
-        const storage = getFirebaseStorage();
-        const ext = file.name.split('.').pop() || 'png';
-        const path = `produtos/${Date.now()}.${ext}`;
-        const storageRef = ref(storage, path);
-        await uploadBytes(storageRef, file);
-        const url = await getDownloadURL(storageRef);
-        setForm({ ...form, imagemUrl: url });
+      const apiKey = process.env.NEXT_PUBLIC_IMGBB_API_KEY;
+      if (apiKey) {
+        const formData = new FormData();
+        formData.append("image", file);
+        
+        const response = await fetch(`https://api.imgbb.com/1/upload?key=${apiKey}`, {
+          method: "POST",
+          body: formData,
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          setForm({ ...form, imagemUrl: data.data.url });
+        } else {
+          throw new Error(data.error?.message || "Erro no ImgBB");
+        }
       } else {
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -185,6 +210,19 @@ export default function ProdutosPage() {
         }
         acao={
           <div className="flex gap-2">
+            <button
+              className="btn-secundario"
+              onClick={recuperarIniciais}
+              disabled={recuperando}
+              title="Recuperar 35 produtos iniciais (demonstração)"
+            >
+              {recuperando ? (
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-acento border-t-transparent" />
+              ) : (
+                <Boxes className="h-4 w-4" />
+              )}
+              <span className="hidden sm:inline">Recuperar</span>
+            </button>
             <button
               className="btn-secundario"
               onClick={() => setImportAberto(true)}

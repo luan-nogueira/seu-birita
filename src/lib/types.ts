@@ -151,6 +151,21 @@ export interface EstoqueMovimento {
   criadoEm: string;
 }
 
+/** Uma despesa/conta a pagar — fornecedor, aluguel, combustível, etc. */
+export interface ContaPagar {
+  id: string;
+  descricao: string;
+  fornecedorId?: string;
+  /** Snapshot: se o fornecedor for renomeado, a conta antiga não muda. */
+  fornecedorNome?: string;
+  valor: number;
+  vencimento: string;
+  pago: boolean;
+  pagoEm?: string;
+  obs?: string;
+  criadoEm: string;
+}
+
 /* ---------------------------------------------------------------------------
    Pedidos feitos pelo cliente na página pública (/pedido).
    Ficam na coleção pedidosClientes — separados dos pedidos internos.
