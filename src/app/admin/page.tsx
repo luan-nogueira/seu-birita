@@ -36,7 +36,11 @@ export default function InicioPage() {
 
   const [mesFiltro, setMesFiltro] = useState(() => new Date().toISOString().slice(0, 7));
 
-  const pedidosDoMes = ativos.filter((p) => p.dataEvento.startsWith(mesFiltro));
+  // Rascunho ainda não é uma venda de verdade — não deve entrar no
+  // faturamento/lucro do mês, só depois de sair do estágio de rascunho.
+  const pedidosDoMes = ativos.filter(
+    (p) => p.status !== "RASCUNHO" && p.dataEvento.startsWith(mesFiltro),
+  );
   const faturadoMes = pedidosDoMes.reduce(
     (soma, p) => soma + calcularTotais(p).valorFinal,
     0,

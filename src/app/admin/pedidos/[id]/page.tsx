@@ -65,7 +65,8 @@ const ROTULO_STATUS: Record<PedidoStatus, string> = {
 export default function PedidoPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const { pedidoPorId, salvarPedido, removerPedido, carregando } = useDados();
+  const { pedidoPorId, salvarPedido, removerPedido, pagamentos, removerPagamento, carregando } =
+    useDados();
 
   const remoto = pedidoPorId(id);
 
@@ -164,6 +165,12 @@ export default function PedidoPage() {
   }
 
   async function confirmarExclusaoPedido() {
+    // Sem isso, os pagamentos ficam órfãos e continuam contando no
+    // Financeiro mesmo depois do pedido excluído.
+    const pagamentosDoPedido = pagamentos.filter((p) => p.pedidoId === pedido!.id);
+    for (const p of pagamentosDoPedido) {
+      await removerPagamento(p.id);
+    }
     await removerPedido(pedido!.id);
     router.push("/admin/pedidos");
   }
