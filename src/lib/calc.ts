@@ -116,9 +116,25 @@ export function calcularTotais(pedido: Pedido): TotaisPedido {
   };
 }
 
-/** Soma o lucro (calcularTotais) de uma lista de pedidos. */
+/** Soma o lucro (calcularTotais) de uma lista de pedidos — lucro cheio, mesmo sem ter recebido ainda. */
 export function lucroTotal(pedidos: Pedido[]): number {
   return pedidos.reduce((soma, p) => soma + calcularTotais(p).lucro, 0);
+}
+
+/**
+ * Lucro proporcional ao que já foi pago — se o cliente pagou metade do
+ * pedido, conta só metade do lucro. Sem isso, um pedido de R$1.900 com
+ * apenas R$900 recebidos já aparecia com o lucro do evento inteiro.
+ */
+export function lucroRecebido(pedido: Pedido): number {
+  const t = calcularTotais(pedido);
+  if (t.totalReceber <= 0) return 0;
+  const fracaoPaga = Math.min(1, Math.max(0, t.valorPago / t.totalReceber));
+  return t.lucro * fracaoPaga;
+}
+
+export function lucroRecebidoTotal(pedidos: Pedido[]): number {
+  return pedidos.reduce((soma, p) => soma + lucroRecebido(p), 0);
 }
 
 /**

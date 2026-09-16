@@ -21,7 +21,7 @@ import { Cabecalho, StatusChip } from "@/components/ui";
 import { ModalAgendarEvento } from "@/components/ModalAgendarEvento";
 import { useDados } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
-import { calcularTotais, lucroTotal } from "@/lib/calc";
+import { calcularTotais, lucroTotal, lucroRecebidoTotal } from "@/lib/calc";
 import { brl, dataBR, hojeISO } from "@/lib/format";
 
 export default function InicioPage() {
@@ -47,8 +47,10 @@ export default function InicioPage() {
     (soma, p) => soma + calcularTotais(p).valorFinal,
     0,
   );
-  const lucroMes = lucroTotal(pedidosDoMes);
-  const margemMes = faturadoMes > 0 ? (lucroMes / faturadoMes) * 100 : 0;
+  // Lucro proporcional ao que já foi pago — um pedido com pagamento parcial
+  // não deve mostrar o lucro do evento inteiro, só o que já entrou.
+  const lucroRecebidoMes = lucroRecebidoTotal(pedidosDoMes);
+  const lucroPrevistoMes = lucroTotal(pedidosDoMes);
 
   const hoje = hojeISO();
   const contasPendentes = contasPagar.filter((c) => !c.pago);
@@ -132,9 +134,15 @@ export default function InicioPage() {
               />
               <Cartao
                 Icone={PiggyBank}
-                rotulo="Lucro no mês"
-                valor={brl(lucroMes)}
-                detalhe={faturadoMes > 0 ? `${margemMes.toFixed(0)}% de margem` : "sem faturamento"}
+                rotulo="Lucro recebido"
+                valor={brl(lucroRecebidoMes)}
+                detalhe={
+                  lucroPrevistoMes > lucroRecebidoMes
+                    ? `de ${brl(lucroPrevistoMes)} previsto`
+                    : faturadoMes > 0
+                      ? "tudo recebido"
+                      : "sem faturamento"
+                }
               />
             </>
           )}

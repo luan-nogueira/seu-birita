@@ -51,13 +51,11 @@ import type {
   PedidoStatus,
 } from "@/lib/types";
 
-const STATUS_DISPONIVEIS: PedidoStatus[] = [
-  "RASCUNHO",
-  "ENTREGUE",
-  "ACERTO",
-  "FINALIZADO",
-  "CANCELADO",
-];
+// Rascunho e Em acerto acontecem sozinhos (rascunho ao criar, em acerto
+// quando tem pagamento parcial) — não precisam de botão pra clicar.
+const STATUS_DISPONIVEIS: PedidoStatus[] = ["ENTREGUE", "FINALIZADO", "CANCELADO"];
+
+const STATUS_AUTOMATICO: PedidoStatus[] = ["RASCUNHO", "ACERTO"];
 
 const ROTULO_STATUS: Record<PedidoStatus, string> = {
   RASCUNHO: "Rascunho",
@@ -446,6 +444,11 @@ function BarraStatus({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <TipoChip tipo={pedido.tipo} />
+      {STATUS_AUTOMATICO.includes(pedido.status) && (
+        <span className="shrink-0 rounded-full border border-borda bg-superficie-2 px-3 py-1.5 text-xs font-bold text-texto-suave">
+          {ROTULO_STATUS[pedido.status]}
+        </span>
+      )}
       <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 md:mx-0 md:px-0">
         {STATUS_DISPONIVEIS.map((s) => (
           <button

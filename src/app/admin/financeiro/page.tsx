@@ -17,7 +17,7 @@ import { Cabecalho, Modal } from "@/components/ui";
 import { Protegido } from "@/components/Protegido";
 import { useDados, novoId } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
-import { calcularTotais, lucroTotal } from "@/lib/calc";
+import { calcularTotais, lucroTotal, lucroRecebidoTotal } from "@/lib/calc";
 import { brl, dataBR, hojeISO, paraCampo, paraNumero } from "@/lib/format";
 import type { ContaPagar, Pagamento } from "@/lib/types";
 
@@ -84,7 +84,8 @@ function FinanceiroPageInterno() {
     () => ativos.filter((p) => p.dataEvento.startsWith(mesFiltro)),
     [ativos, mesFiltro],
   );
-  const lucroMes = lucroTotal(pedidosDoMes);
+  const lucroRecebidoMes = lucroRecebidoTotal(pedidosDoMes);
+  const lucroPrevistoMes = lucroTotal(pedidosDoMes);
 
   const aReceber = ativos.reduce(
     (s, p) => s + Math.max(0, calcularTotais(p).saldoAberto),
@@ -283,14 +284,16 @@ function FinanceiroPageInterno() {
             <div className="flex items-center gap-1.5 text-texto-suave">
               <PiggyBank className="h-3.5 w-3.5" />
               <p className="text-[11px] font-semibold tracking-wide uppercase">
-                Lucro no mês
+                Lucro recebido
               </p>
             </div>
             <p className="mt-1.5 text-2xl font-black tabular-nums">
-              {brl(lucroMes)}
+              {brl(lucroRecebidoMes)}
             </p>
             <p className="mt-0.5 text-xs text-texto-suave">
-              {pedidosDoMes.length} evento(s) no mês
+              {lucroPrevistoMes > lucroRecebidoMes
+                ? `de ${brl(lucroPrevistoMes)} previsto`
+                : `${pedidosDoMes.length} evento(s) no mês`}
             </p>
           </div>
         </div>
