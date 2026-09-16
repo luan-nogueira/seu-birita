@@ -18,7 +18,7 @@ import { TemaBotao } from "@/components/TemaBotao";
 import { ProdutoImagem } from "@/components/ProdutoImagem";
 import { useDados, novoId } from "@/lib/store";
 import { brl, normalizar } from "@/lib/format";
-import { precoDaTabela, tabelaDaUrl } from "@/lib/calc";
+import { precoNaTabela, tabelaDaUrl } from "@/lib/calc";
 import { EMPRESA } from "@/lib/empresa";
 import type { PedidoCliente, PedidoClienteItem, Produto } from "@/lib/types";
 
@@ -52,7 +52,7 @@ export default function PedidoPage() {
 function PedidoPageInterno() {
   const { produtos, carregando, salvarPedidoCliente, proximoNumeroPedidoCliente } = useDados();
   const tabela = tabelaDaUrl(useSearchParams().get("tabela"));
-  const precoDe = useCallback((p: Produto) => precoDaTabela(p, tabela), [tabela]);
+  const precoDe = useCallback((p: Produto) => precoNaTabela(p, tabela), [tabela]);
 
   const [busca, setBusca] = useState("");
   const [categoriaAtiva, setCategoriaAtiva] = useState<string | null>(null);
@@ -294,6 +294,7 @@ function PedidoPageInterno() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
           {produtosFiltrados.map((p) => {
             const qtd = qtdNoProduto(p.id);
+            const preco = precoDe(p);
             return (
               <div
                 key={p.id}
@@ -338,21 +339,29 @@ function PedidoPageInterno() {
                   <p className="flex-1 text-sm font-bold leading-tight line-clamp-2">
                     {p.nome}
                   </p>
-                  <p className="text-base font-black tabular-nums text-acento">
-                    {brl(precoDe(p))}
-                    <span className="text-xs font-normal text-texto-suave">
-                      {" "}
-                      /un
-                    </span>
-                  </p>
-                  {p.unPorCaixa > 1 && (
+                  {preco === null ? (
+                    <p className="text-sm font-semibold text-texto-suave">Sob consulta</p>
+                  ) : (
+                    <p className="text-base font-black tabular-nums text-acento">
+                      {brl(preco)}
+                      <span className="text-xs font-normal text-texto-suave">
+                        {" "}
+                        /un
+                      </span>
+                    </p>
+                  )}
+                  {preco !== null && p.unPorCaixa > 1 && (
                     <p className="text-[10px] text-texto-suave">
-                      Cx c/ {p.unPorCaixa} → {brl(precoDe(p) * p.unPorCaixa)}
+                      Cx c/ {p.unPorCaixa} → {brl(preco * p.unPorCaixa)}
                     </p>
                   )}
 
                   {/* Controle de quantidade */}
-                  {qtd.total === 0 ? (
+                  {preco === null ? (
+                    <p className="mt-2 rounded-xl border border-borda py-1.5 text-center text-[11px] text-texto-suave">
+                      Consulte o preço
+                    </p>
+                  ) : qtd.total === 0 ? (
                     <button
                       type="button"
                       id={`add-${p.id}`}
@@ -360,7 +369,7 @@ function PedidoPageInterno() {
                         if (p.unPorCaixa > 1) {
                           setProdutoCaixa(p);
                         } else {
-                          alterarQtd(p.id, 0, 1, p.nome, precoDe(p), p.unPorCaixa);
+                          alterarQtd(p.id, 0, 1, p.nome, preco, p.unPorCaixa);
                         }
                       }}
                       className="mt-2 w-full rounded-xl bg-gradient-to-r from-acento to-ouro-500 py-1.5 text-xs font-bold text-acento-texto shadow-sm shadow-acento/20 transition hover:brightness-110 active:scale-95"
@@ -375,7 +384,7 @@ function PedidoPageInterno() {
                           <div className="flex items-center bg-superficie">
                             <button
                               type="button"
-                              onClick={() => alterarQtd(p.id, -1, 0, p.nome, precoDe(p), p.unPorCaixa)}
+                              onClick={() => alterarQtd(p.id, -1, 0, p.nome, preco, p.unPorCaixa)}
                               className="flex h-7 w-7 items-center justify-center text-acento transition hover:bg-acento/10"
                             >
                               <Minus className="h-3.5 w-3.5" />
@@ -383,7 +392,7 @@ function PedidoPageInterno() {
                             <span className="w-6 text-center text-xs font-black tabular-nums text-acento">{qtd.cx}</span>
                             <button
                               type="button"
-                              onClick={() => alterarQtd(p.id, 1, 0, p.nome, precoDe(p), p.unPorCaixa)}
+                              onClick={() => alterarQtd(p.id, 1, 0, p.nome, preco, p.unPorCaixa)}
                               className="flex h-7 w-7 items-center justify-center text-acento transition hover:bg-acento/10"
                             >
                               <Plus className="h-3.5 w-3.5" />
@@ -396,7 +405,7 @@ function PedidoPageInterno() {
                         <div className={`flex items-center flex-1 justify-between bg-superficie`}>
                           <button
                             type="button"
-                            onClick={() => alterarQtd(p.id, 0, -1, p.nome, precoDe(p), p.unPorCaixa)}
+                            onClick={() => alterarQtd(p.id, 0, -1, p.nome, preco, p.unPorCaixa)}
                             className={`flex ${p.unPorCaixa > 1 ? "h-7 w-7" : "h-8 w-8"} items-center justify-center transition hover:bg-superficie-2`}
                           >
                             <Minus className="h-3.5 w-3.5" />
@@ -404,7 +413,7 @@ function PedidoPageInterno() {
                           <span className={`text-center ${p.unPorCaixa > 1 ? "text-xs w-6" : "text-sm flex-1"} font-black tabular-nums`}>{qtd.un}</span>
                           <button
                             type="button"
-                            onClick={() => alterarQtd(p.id, 0, 1, p.nome, precoDe(p), p.unPorCaixa)}
+                            onClick={() => alterarQtd(p.id, 0, 1, p.nome, preco, p.unPorCaixa)}
                             className={`flex ${p.unPorCaixa > 1 ? "h-7 w-7" : "h-8 w-8"} items-center justify-center transition hover:bg-superficie-2`}
                           >
                             <Plus className="h-3.5 w-3.5" />
@@ -808,7 +817,7 @@ function PedidoPageInterno() {
               <button
                 type="button"
                 onClick={() => {
-                  alterarQtd(produtoCaixa.id, 0, 1, produtoCaixa.nome, precoDe(produtoCaixa), produtoCaixa.unPorCaixa);
+                  alterarQtd(produtoCaixa.id, 0, 1, produtoCaixa.nome, (precoDe(produtoCaixa) ?? 0), produtoCaixa.unPorCaixa);
                   setProdutoCaixa(null);
                 }}
                 className="w-full flex items-center justify-between p-4 rounded-2xl border transition hover:bg-superficie-2 hover:border-acento group"
@@ -818,13 +827,13 @@ function PedidoPageInterno() {
                   <p className="font-bold group-hover:text-acento transition-colors">Unidade avulsa</p>
                   <p className="text-xs text-texto-suave">1 unidade</p>
                 </div>
-                <span className="font-black text-lg">{brl(precoDe(produtoCaixa))}</span>
+                <span className="font-black text-lg">{brl((precoDe(produtoCaixa) ?? 0))}</span>
               </button>
               
               <button
                 type="button"
                 onClick={() => {
-                  alterarQtd(produtoCaixa.id, 1, 0, produtoCaixa.nome, precoDe(produtoCaixa), produtoCaixa.unPorCaixa);
+                  alterarQtd(produtoCaixa.id, 1, 0, produtoCaixa.nome, (precoDe(produtoCaixa) ?? 0), produtoCaixa.unPorCaixa);
                   setProdutoCaixa(null);
                 }}
                 className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-acento bg-acento/5 transition hover:bg-acento/10"
@@ -833,7 +842,7 @@ function PedidoPageInterno() {
                   <p className="font-bold text-acento">Caixa fechada</p>
                   <p className="text-xs text-acento/70">{produtoCaixa.unPorCaixa} unidades</p>
                 </div>
-                <span className="font-black text-lg text-acento">{brl(precoDe(produtoCaixa) * produtoCaixa.unPorCaixa)}</span>
+                <span className="font-black text-lg text-acento">{brl((precoDe(produtoCaixa) ?? 0) * produtoCaixa.unPorCaixa)}</span>
               </button>
             </div>
           </div>

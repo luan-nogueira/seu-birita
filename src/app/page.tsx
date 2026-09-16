@@ -9,7 +9,7 @@ import { TemaBotao } from "@/components/TemaBotao";
 import { ProdutoImagem } from "@/components/ProdutoImagem";
 import { useDados } from "@/lib/store";
 import { brl, normalizar } from "@/lib/format";
-import { precoDaTabela, tabelaDaUrl } from "@/lib/calc";
+import { precoNaTabela, tabelaDaUrl } from "@/lib/calc";
 import { EMPRESA } from "@/lib/empresa";
 
 /**
@@ -163,7 +163,9 @@ function CatalogoPageInterno() {
                 </span>
               </h2>
               <ul className="card divide-y divide-borda overflow-hidden">
-                {itens.map((p) => (
+                {itens.map((p) => {
+                  const preco = precoNaTabela(p, tabela);
+                  return (
                   <li
                     key={p.id}
                     className="flex items-center gap-4 px-4 py-4 md:px-6 md:py-5 transition hover:bg-superficie-2"
@@ -190,24 +192,35 @@ function CatalogoPageInterno() {
                       {p.nome}
                     </span>
 
-                    {p.unPorCaixa > 1 && (
-                      <span className="shrink-0 text-right text-sm md:text-base text-texto-suave">
-                        cx c/ {p.unPorCaixa}
-                        <br />
-                        {brl(precoDaTabela(p, tabela) * p.unPorCaixa)}
-                      </span>
-                    )}
+                    {preco === null ? (
+                      <div className="w-24 md:w-28 shrink-0 text-right">
+                        <span className="text-sm font-semibold text-texto-suave">
+                          Sob consulta
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        {p.unPorCaixa > 1 && (
+                          <span className="shrink-0 text-right text-sm md:text-base text-texto-suave">
+                            cx c/ {p.unPorCaixa}
+                            <br />
+                            {brl(preco * p.unPorCaixa)}
+                          </span>
+                        )}
 
-                    <div className="w-24 md:w-28 shrink-0 text-right">
-                      <span className="text-lg md:text-xl font-black tabular-nums text-acento">
-                        {brl(precoDaTabela(p, tabela))}
-                      </span>
-                      <span className="block text-xs md:text-sm font-normal text-texto-suave">
-                        unidade
-                      </span>
-                    </div>
+                        <div className="w-24 md:w-28 shrink-0 text-right">
+                          <span className="text-lg md:text-xl font-black tabular-nums text-acento">
+                            {brl(preco)}
+                          </span>
+                          <span className="block text-xs md:text-sm font-normal text-texto-suave">
+                            unidade
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </section>
           ))}

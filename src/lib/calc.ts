@@ -1,10 +1,18 @@
 import type { Pedido, PedidoItem, PedidoTipo, Produto } from "./types";
 
-/** Preço do produto na tabela escolhida — cai pra Tabela 1 se a 2/3 não existir. */
-export function precoDaTabela(produto: Produto, tabela: 1 | 2 | 3): number {
-  if (tabela === 2 && produto.precoTabela2) return produto.precoTabela2;
-  if (tabela === 3 && produto.precoTabela3) return produto.precoTabela3;
+/**
+ * Preço do produto na tabela escolhida — null se o produto não tiver a
+ * Tabela 2/3 cadastrada (a Tabela 1 sempre existe, é o preço base).
+ */
+export function precoNaTabela(produto: Produto, tabela: 1 | 2 | 3): number | null {
+  if (tabela === 2) return produto.precoTabela2 ?? null;
+  if (tabela === 3) return produto.precoTabela3 ?? null;
   return produto.precoUn;
+}
+
+/** Igual precoNaTabela, mas cai pra Tabela 1 se a 2/3 não existir — uso interno do admin. */
+export function precoDaTabela(produto: Produto, tabela: 1 | 2 | 3): number {
+  return precoNaTabela(produto, tabela) ?? produto.precoUn;
 }
 
 /** Lê "?tabela=2" da URL — só aceita 2 ou 3, qualquer outra coisa é Tabela 1. */
