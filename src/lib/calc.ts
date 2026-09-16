@@ -1,4 +1,18 @@
-import type { Pedido, PedidoItem, PedidoTipo } from "./types";
+import type { Pedido, PedidoItem, PedidoTipo, Produto } from "./types";
+
+/** Preço do produto na tabela escolhida — cai pra Tabela 1 se a 2/3 não existir. */
+export function precoDaTabela(produto: Produto, tabela: 1 | 2 | 3): number {
+  if (tabela === 2 && produto.precoTabela2) return produto.precoTabela2;
+  if (tabela === 3 && produto.precoTabela3) return produto.precoTabela3;
+  return produto.precoUn;
+}
+
+/** Lê "?tabela=2" da URL — só aceita 2 ou 3, qualquer outra coisa é Tabela 1. */
+export function tabelaDaUrl(valor: string | null): 1 | 2 | 3 {
+  if (valor === "2") return 2;
+  if (valor === "3") return 3;
+  return 1;
+}
 
 /** Converte caixas + unidades avulsas em unidades totais. */
 export function paraUnidades(cx: number, un: number, unPorCaixa: number): number {

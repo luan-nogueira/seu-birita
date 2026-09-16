@@ -27,6 +27,7 @@ import {
   efeitoEstoque,
   entregueUn,
   novoItem,
+  precoDaTabela,
   saldoUn,
   totalRemessas,
   valorFinalItem,
@@ -48,7 +49,6 @@ import type {
   Pedido,
   PedidoItem,
   PedidoStatus,
-  Produto,
 } from "@/lib/types";
 
 const STATUS_DISPONIVEIS: PedidoStatus[] = [
@@ -958,12 +958,6 @@ function SeletorProdutos({
       else novo.add(id);
       return novo;
     });
-  }
-
-  function precoDaTabela(p: Produto, tabela: 1 | 2 | 3): number {
-    if (tabela === 2 && p.precoTabela2) return p.precoTabela2;
-    if (tabela === 3 && p.precoTabela3) return p.precoTabela3;
-    return p.precoUn;
   }
 
   function confirmar() {

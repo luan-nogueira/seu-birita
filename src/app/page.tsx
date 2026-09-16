@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { MessageCircle, Search, ShoppingBag } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { TemaBotao } from "@/components/TemaBotao";
 import { ProdutoImagem } from "@/components/ProdutoImagem";
 import { useDados } from "@/lib/store";
 import { brl, normalizar } from "@/lib/format";
+import { precoDaTabela, tabelaDaUrl } from "@/lib/calc";
 import { EMPRESA } from "@/lib/empresa";
 
 /**
@@ -15,9 +17,19 @@ import { EMPRESA } from "@/lib/empresa";
  * Agora com botão de pedido online apontando para /pedido.
  */
 export default function CatalogoPage() {
+  return (
+    <Suspense fallback={null}>
+      <CatalogoPageInterno />
+    </Suspense>
+  );
+}
+
+function CatalogoPageInterno() {
   const { produtos, carregando } = useDados();
   const [busca, setBusca] = useState("");
   const [categoriaAtiva, setCategoriaAtiva] = useState<string | null>(null);
+  const tabela = tabelaDaUrl(useSearchParams().get("tabela"));
+  const sufixoLink = tabela === 1 ? "" : `?tabela=${tabela}`;
 
   const visiveis = useMemo(() => {
     const termo = normalizar(busca);
@@ -73,7 +85,7 @@ export default function CatalogoPage() {
 
           {/* CTA — Pedido online */}
           <Link
-            href="/pedido"
+            href={`/pedido${sufixoLink}`}
             id="btn-fazer-pedido-online"
             className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-ouro-500 px-8 py-4 text-lg font-bold text-marrom-900 shadow-lg transition hover:bg-ouro-400 active:scale-95"
           >
@@ -182,13 +194,13 @@ export default function CatalogoPage() {
                       <span className="shrink-0 text-right text-sm md:text-base text-texto-suave">
                         cx c/ {p.unPorCaixa}
                         <br />
-                        {brl(p.precoUn * p.unPorCaixa)}
+                        {brl(precoDaTabela(p, tabela) * p.unPorCaixa)}
                       </span>
                     )}
 
                     <div className="w-24 md:w-28 shrink-0 text-right">
                       <span className="text-lg md:text-xl font-black tabular-nums text-acento">
-                        {brl(p.precoUn)}
+                        {brl(precoDaTabela(p, tabela))}
                       </span>
                       <span className="block text-xs md:text-sm font-normal text-texto-suave">
                         unidade
@@ -204,7 +216,7 @@ export default function CatalogoPage() {
         {/* CTAs finais */}
         <div className="mt-10 flex flex-col items-center gap-3">
           <Link
-            href="/pedido"
+            href={`/pedido${sufixoLink}`}
             className="btn-primario w-full justify-center py-3.5 text-base sm:w-auto sm:min-w-72"
           >
             <ShoppingBag className="h-5 w-5" />
