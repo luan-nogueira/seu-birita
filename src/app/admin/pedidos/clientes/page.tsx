@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
+  ArrowRightCircle,
   Check,
   CheckCircle,
   Clock,
@@ -16,9 +18,12 @@ import {
 } from "lucide-react";
 import { Cabecalho, Modal } from "@/components/ui";
 import { Protegido } from "@/components/Protegido";
-import { useDados } from "@/lib/store";
-import { brl, dataBR, dataHoraBR, telefoneBR } from "@/lib/format";
+import { useDados, novoId } from "@/lib/store";
+import { calcularTotais, efeitoEstoque } from "@/lib/calc";
+import { aplicarAjusteEstoque } from "@/lib/estoque";
+import { brl, dataBR, dataHoraBR, hojeISO, telefoneBR } from "@/lib/format";
 import { EMPRESA } from "@/lib/empresa";
+import type { Cliente, Pedido, PedidoItem } from "@/lib/types";
 import type { PedidoCliente, PedidoClienteStatus } from "@/lib/types";
 
 /* -------------------------------------------------------------------------- */
@@ -71,11 +76,19 @@ export default function PedidosClientesPage() {
 }
 
 function PedidosClientesPageInterno() {
+  const router = useRouter();
   const {
     pedidosClientes,
     pedidosClientesNovos,
     salvarPedidoCliente,
     removerPedidoCliente,
+    clientes,
+    salvarCliente,
+    produtoPorId,
+    salvarProduto,
+    salvarMovimento,
+    salvarPedido,
+    proximoNumeroPedido,
     carregando,
   } = useDados();
 
@@ -84,7 +97,79 @@ function PedidosClientesPageInterno() {
   >("TODOS");
   const [pedidoAberto, setPedidoAberto] = useState<PedidoCliente | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [convertendo, setConvertendo] = useState(false);
   const [excluindoPedido, setExcluindoPedido] = useState<PedidoCliente | null>(null);
+
+  /** Cria um Pedido interno de verdade a partir de um pedido feito pelo cliente. */
+  async function converterEmPedido(pc: PedidoCliente) {
+    setConvertendo(true);
+    try {
+      const telNormalizado = pc.telefone.replace(/\D/g, "");
+      let cliente = clientes.find(
+        (c) => (c.telefone || "").replace(/\D/g, "") === telNormalizado,
+      );
+      if (!cliente) {
+        cliente = {
+          id: novoId(),
+          nome: pc.nomeCliente,
+          tipo: "PF",
+          telefone: pc.telefone,
+          endereco: pc.localEvento,
+          ativo: true,
+          criadoEm: new Date().toISOString(),
+        } satisfies Cliente;
+        await salvarCliente(cliente);
+      }
+
+      const itens: PedidoItem[] = pc.itens.map((i) => ({
+        produtoId: i.produtoId,
+        nome: i.nome,
+        unPorCaixa: i.unPorCaixa,
+        precoUn: i.precoUn,
+        custoUn: produtoPorId(i.produtoId)?.precoCusto ?? 0,
+        entregas: [{ numero: 1, cx: i.cx, un: i.un }],
+        devolucaoCx: 0,
+        devolucaoUn: 0,
+      }));
+
+      const agora = new Date().toISOString();
+      const novoPedido: Pedido = {
+        id: novoId(),
+        numero: proximoNumeroPedido(),
+        clienteId: cliente.id,
+        clienteNome: cliente.nome,
+        tipo: "VENDA_DIRETA",
+        titulo: pc.localEvento || undefined,
+        dataEvento: pc.dataEvento || hojeISO(),
+        status: "RASCUNHO",
+        pendenciaAnterior: 0,
+        desconto: 0,
+        obs: pc.obs,
+        itens,
+        valorPedido: 0,
+        valorFinal: 0,
+        valorPago: 0,
+        criadoEm: agora,
+        atualizadoEm: agora,
+      };
+      const totais = calcularTotais(novoPedido);
+      novoPedido.valorPedido = totais.valorPedido;
+      novoPedido.valorFinal = totais.valorFinal;
+
+      await salvarPedido(novoPedido);
+      await aplicarAjusteEstoque(new Map(), efeitoEstoque(novoPedido), novoPedido.id, {
+        produtoPorId,
+        salvarProduto,
+        salvarMovimento,
+      });
+      await salvarPedidoCliente({ ...pc, status: "CONFIRMADO", atualizadoEm: agora });
+
+      setPedidoAberto(null);
+      router.push(`/admin/pedidos/${novoPedido.id}`);
+    } finally {
+      setConvertendo(false);
+    }
+  }
 
   /* ----------------------------- Filtro --------------------------------- */
 
@@ -412,6 +497,15 @@ function PedidosClientesPageInterno() {
 
             {/* Botões de ação */}
             <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                disabled={convertendo}
+                onClick={() => void converterEmPedido(pedidoAberto)}
+                className="btn-primario w-full py-3 disabled:opacity-60"
+              >
+                <ArrowRightCircle className="h-5 w-5" />
+                {convertendo ? "Convertendo…" : "Converter em pedido"}
+              </button>
               <a
                 href={whatsappLink(pedidoAberto)}
                 target="_blank"

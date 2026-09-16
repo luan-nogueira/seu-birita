@@ -21,6 +21,7 @@ import { CampoQtd } from "@/components/CampoQtd";
 import { Protegido } from "@/components/Protegido";
 import { useAuth } from "@/lib/auth";
 import { useDados, novoId } from "@/lib/store";
+import { aplicarAjusteEstoque } from "@/lib/estoque";
 import {
   calcularTotais,
   devolvidoUn,
@@ -44,7 +45,6 @@ import {
   paraNumero,
 } from "@/lib/format";
 import type {
-  EstoqueMovimento,
   FormaPagamento,
   Pedido,
   PedidoItem,
@@ -111,41 +111,7 @@ function PedidoPageInterno() {
     }
   }, [remoto]);
 
-  /** Lança em Estoque só a diferença entre o que saiu antes e o que sai agora. */
-  async function aplicarAjusteEstoque(
-    efeitoAntes: Map<string, number>,
-    efeitoDepois: Map<string, number>,
-    pedidoId: string,
-  ) {
-    const produtoIds = new Set([...efeitoAntes.keys(), ...efeitoDepois.keys()]);
-    for (const produtoId of produtoIds) {
-      const antes = efeitoAntes.get(produtoId) ?? 0;
-      const depois = efeitoDepois.get(produtoId) ?? 0;
-      const delta = depois - antes; // positivo = mais unidades saíram do galpão
-      if (delta === 0) continue;
-
-      const produto = produtoPorId(produtoId);
-      if (!produto) continue;
-
-      const movimento: EstoqueMovimento = {
-        id: novoId(),
-        produtoId,
-        produtoNome: produto.nome,
-        tipo: delta > 0 ? "SAIDA" : "ENTRADA",
-        origem: delta > 0 ? "PEDIDO" : "DEVOLUCAO",
-        quantidadeUn: Math.abs(delta),
-        referenciaId: pedidoId,
-        data: new Date().toISOString(),
-        criadoEm: new Date().toISOString(),
-      };
-      await salvarMovimento(movimento);
-      await salvarProduto({
-        ...produto,
-        estoqueUn: Math.max(0, produto.estoqueUn - delta),
-        atualizadoEm: new Date().toISOString(),
-      });
-    }
-  }
+  const deps = { produtoPorId, salvarProduto, salvarMovimento };
 
   // Salvamento automático com uma pausa, pra não gravar a cada tecla.
   const primeiraGravacao = useRef(true);
@@ -170,6 +136,7 @@ function PedidoPageInterno() {
         ultimoEstoqueAplicado.current ?? new Map(),
         efeitoNovo,
         pedido.id,
+        deps,
       );
       ultimoEstoqueAplicado.current = efeitoNovo;
 
@@ -249,6 +216,7 @@ function PedidoPageInterno() {
       ultimoEstoqueAplicado.current ?? efeitoEstoque(pedido!),
       new Map(),
       pedido!.id,
+      deps,
     );
 
     await removerPedido(pedido!.id);

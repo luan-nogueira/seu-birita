@@ -1,14 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { Component, useState, type ReactNode } from "react";
 import Image, { type ImageProps } from "next/image";
 
 type Props = Omit<ImageProps, "unoptimized"> & {
   /** Mostrado no lugar da imagem se ela continuar falhando depois das tentativas. */
-  fallback: React.ReactNode;
+  fallback: ReactNode;
 };
 
 const MAX_TENTATIVAS = 2;
+
+/**
+ * Pega erros de RENDER do next/image (ex: host da foto não está na lista
+ * liberada em next.config.ts) — sem isso, uma única foto mal configurada
+ * derruba a página inteira em vez de só aquele produto.
+ */
+class LimiteDeErro extends Component<
+  { fallback: ReactNode; children: ReactNode },
+  { falhou: boolean }
+> {
+  state = { falhou: false };
+  static getDerivedStateFromError() {
+    return { falhou: true };
+  }
+  render() {
+    return this.state.falhou ? this.props.fallback : this.props.children;
+  }
+}
 
 /**
  * next/image com cache/otimização do Vercel — fotos de produto carregam
@@ -27,15 +45,17 @@ export function ProdutoImagem({ src, fallback, onError, ...props }: Props) {
   if (tentativa > MAX_TENTATIVAS) return <>{fallback}</>;
 
   return (
-    <Image
-      key={tentativa}
-      src={src}
-      unoptimized={dataUrl}
-      onError={(e) => {
-        setTimeout(() => setTentativa((t) => t + 1), 1000);
-        onError?.(e);
-      }}
-      {...props}
-    />
+    <LimiteDeErro fallback={fallback}>
+      <Image
+        key={tentativa}
+        src={src}
+        unoptimized={dataUrl}
+        onError={(e) => {
+          setTimeout(() => setTentativa((t) => t + 1), 1000);
+          onError?.(e);
+        }}
+        {...props}
+      />
+    </LimiteDeErro>
   );
 }
