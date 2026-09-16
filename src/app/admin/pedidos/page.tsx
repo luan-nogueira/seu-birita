@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClipboardList, Plus, Search } from "lucide-react";
 import { Cabecalho, Modal, StatusChip, TipoChip, Vazio } from "@/components/ui";
+import { Protegido } from "@/components/Protegido";
 import { useDados, novoId } from "@/lib/store";
 import { calcularTotais } from "@/lib/calc";
 import { brl, dataBR, hojeISO, normalizar } from "@/lib/format";
@@ -20,9 +21,11 @@ const FILTROS: { valor: PedidoStatus | "TODOS"; rotulo: string }[] = [
 
 export default function PedidosPage() {
   return (
-    <Suspense fallback={<Cabecalho titulo="Pedidos" subtitulo="Carregando…" />}>
-      <ConteudoPedidos />
-    </Suspense>
+    <Protegido chave="pedidos">
+      <Suspense fallback={<Cabecalho titulo="Pedidos" subtitulo="Carregando…" />}>
+        <ConteudoPedidos />
+      </Suspense>
+    </Protegido>
   );
 }
 

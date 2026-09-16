@@ -1,11 +1,11 @@
-import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
+import { initializeApp, deleteApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import {
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
   type Firestore,
 } from "firebase/firestore";
-import { getAuth, type Auth } from "firebase/auth";
+import { createUserWithEmailAndPassword, getAuth, type Auth } from "firebase/auth";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 const config = {
@@ -56,4 +56,27 @@ let storage: FirebaseStorage | null = null;
 export function getFirebaseStorage(): FirebaseStorage {
   if (!storage) storage = getStorage(getFirebaseApp());
   return storage;
+}
+
+/**
+ * Cria um login (Firebase Auth) pra um funcionário sem derrubar a sessão
+ * de quem está criando — o SDK do Firebase normalmente troca de usuário
+ * pro recém-criado, então isso roda num app secundário temporário e
+ * descarta ele em seguida, sem afetar o app principal.
+ */
+export async function criarLoginFuncionario(
+  email: string,
+  senha: string,
+): Promise<string> {
+  const appSecundario = initializeApp(
+    config as Required<typeof config>,
+    `secundario-${Date.now()}`,
+  );
+  try {
+    const authSecundario = getAuth(appSecundario);
+    const cred = await createUserWithEmailAndPassword(authSecundario, email, senha);
+    return cred.user.uid;
+  } finally {
+    await deleteApp(appSecundario);
+  }
 }

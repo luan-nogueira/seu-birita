@@ -5,6 +5,14 @@ rules_version = '2';
 // Princípio: só a equipe logada mexe nos dados. A única exceção é a leitura
 // dos produtos, porque a tabela de preços pública (/catalogo) é aberta —
 // é o link que vai pro cliente no lugar do kyte.site.
+//
+// Permissões por funcionário: cada usuário logado pode ter um documento em
+// /usuarios/{uid} com papel ("admin" ou "funcionario") e um mapa de
+// permissões. Sem documento = conta antiga/dona do sistema = acesso total
+// (pra não travar quem já usava o sistema antes desse recurso existir).
+// "ativo: false" revoga o acesso sem precisar apagar o login nem o documento
+// (apagar o documento faria a conta cair na regra "sem documento = admin",
+// o oposto do que se quer ao revogar).
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -13,27 +21,77 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Catálogo público: qualquer um lê, só a equipe escreve.
-    match /produtos/{doc} {
-      allow read: if true;
-      allow write: if logado();
+    function temPerfil() {
+      return exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
     }
 
-    // Dados do negócio: clientes, fornecedores, pedidos, pagamentos,
-    // movimentos de estoque. Nada disso é público.
-    match /clientes/{doc}     { allow read, write: if logado(); }
-    match /fornecedores/{doc} { allow read, write: if logado(); }
-    match /pedidos/{doc}      { allow read, write: if logado(); }
-    match /pagamentos/{doc}   { allow read, write: if logado(); }
-    match /movimentos/{doc}   { allow read, write: if logado(); }
-    match /contasPagar/{doc}  { allow read, write: if logado(); }
+    function perfil() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    function contaAtiva() {
+      return !temPerfil() || perfil().ativo != false;
+    }
+
+    function ehAdmin() {
+      return logado() && contaAtiva() && (!temPerfil() || perfil().papel == "admin");
+    }
+
+    function temPermissao(chave) {
+      return logado() && contaAtiva() && (ehAdmin() || perfil().permissoes[chave] == true);
+    }
+
+    // Catálogo público: qualquer um lê, só quem mexe em produtos ou pedidos escreve
+    // (fechar um pedido atualiza estoqueUn/precoCusto automaticamente).
+    match /produtos/{doc} {
+      allow read: if true;
+      allow write: if temPermissao("produtos") || temPermissao("pedidos");
+    }
+
+    // Clientes: quem monta pedido precisa ver a lista pra escolher o cliente,
+    // mas só quem tem a permissão "clientes" cadastra/edita/exclui.
+    match /clientes/{doc} {
+      allow read: if temPermissao("clientes") || temPermissao("pedidos");
+      allow write: if temPermissao("clientes");
+    }
+
+    // Fornecedores: o lançamento de compra no Estoque tem um seletor opcional
+    // de fornecedor, por isso quem tem "estoque" também lê a lista.
+    match /fornecedores/{doc} {
+      allow read: if temPermissao("fornecedores") || temPermissao("estoque");
+      allow write: if temPermissao("fornecedores");
+    }
+
+    match /pedidos/{doc} { allow read, write: if temPermissao("pedidos"); }
+
+    // Registrar pagamento faz parte de fechar um pedido — libera também pra
+    // quem só tem "pedidos", mesmo sem ver a aba Financeiro inteira.
+    match /pagamentos/{doc} {
+      allow read, write: if temPermissao("financeiro") || temPermissao("pedidos");
+    }
+
+    // Entregar/devolver item de pedido lança movimento de estoque sozinho —
+    // libera também pra quem só tem "pedidos".
+    match /movimentos/{doc} {
+      allow read, write: if temPermissao("estoque") || temPermissao("pedidos");
+    }
+
+    match /contasPagar/{doc} { allow read, write: if temPermissao("financeiro"); }
 
     // Pedidos feitos pelo cliente na página pública (/pedido).
     // Qualquer um pode criar (anônimo) — é o fluxo normal de pedido público.
-    // Apenas a equipe logada pode ler, atualizar ou deletar.
     match /pedidosClientes/{doc} {
       allow create: if true;
-      allow read, update, delete: if logado();
+      allow read: if temPermissao("online") || temPermissao("agenda");
+      allow update, delete: if temPermissao("online");
+    }
+
+    // Permissões da equipe: cada um lê o próprio documento (o app precisa
+    // disso pra saber o que mostrar); só admin lê a lista inteira e só
+    // admin cria/edita/desativa alguém.
+    match /usuarios/{uid} {
+      allow read: if logado() && (request.auth.uid == uid || ehAdmin());
+      allow write: if ehAdmin();
     }
 
     // Nada além do que está declarado acima.

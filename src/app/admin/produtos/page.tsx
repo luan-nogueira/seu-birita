@@ -14,7 +14,9 @@ import {
   Upload,
 } from "lucide-react";
 import { Cabecalho, Modal, Vazio } from "@/components/ui";
+import { Protegido } from "@/components/Protegido";
 import { useDados, novoId } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { firebaseConfigurado } from "@/lib/firebase";
 import { brl, normalizar, paraCampo, paraNumero } from "@/lib/format";
 import { CATEGORIAS_PADRAO, semearProdutos } from "@/lib/db/seed";
@@ -51,7 +53,16 @@ const FORM_VAZIO: Formulario = {
 };
 
 export default function ProdutosPage() {
+  return (
+    <Protegido chave="produtos">
+      <ProdutosPageInterno />
+    </Protegido>
+  );
+}
+
+function ProdutosPageInterno() {
   const { produtos, salvarProduto, removerProduto, carregando } = useDados();
+  const { permissoes } = useAuth();
 
   const [busca, setBusca] = useState("");
   const [editando, setEditando] = useState<Produto | null>(null);
@@ -337,13 +348,15 @@ export default function ProdutosPage() {
                     >
                       <Pencil className="h-4 w-4" />
                     </button>
-                    <button
-                      className="grid h-9 w-9 place-items-center rounded-lg text-texto-suave transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
-                      onClick={() => solicitarExclusao(p)}
-                      aria-label={`Excluir ${p.nome}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    {permissoes.excluir && (
+                      <button
+                        className="grid h-9 w-9 place-items-center rounded-lg text-texto-suave transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                        onClick={() => solicitarExclusao(p)}
+                        aria-label={`Excluir ${p.nome}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </li>
               ))}
@@ -548,22 +561,24 @@ export default function ProdutosPage() {
             hora de montar o pedido (ex: cliente VIP, evento fechado...).
           </p>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="rotulo" htmlFor="custo">
-                Custo por unidade
-              </label>
-              <input
-                id="custo"
-                className="campo"
-                inputMode="decimal"
-                placeholder="opcional"
-                value={form.precoCusto}
-                onChange={(e) =>
-                  setForm({ ...form, precoCusto: e.target.value })
-                }
-              />
-            </div>
+          <div className={permissoes.verCusto ? "grid grid-cols-2 gap-3" : ""}>
+            {permissoes.verCusto && (
+              <div>
+                <label className="rotulo" htmlFor="custo">
+                  Custo por unidade
+                </label>
+                <input
+                  id="custo"
+                  className="campo"
+                  inputMode="decimal"
+                  placeholder="opcional"
+                  value={form.precoCusto}
+                  onChange={(e) =>
+                    setForm({ ...form, precoCusto: e.target.value })
+                  }
+                />
+              </div>
+            )}
             <div>
               <label className="rotulo" htmlFor="minimo">
                 Estoque mínimo
@@ -580,7 +595,7 @@ export default function ProdutosPage() {
             </div>
           </div>
 
-          {paraNumero(form.precoCusto) > 0 && paraNumero(form.precoUn) > 0 && (
+          {permissoes.verCusto && paraNumero(form.precoCusto) > 0 && paraNumero(form.precoUn) > 0 && (
             <p className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
               Margem de{" "}
               <strong>

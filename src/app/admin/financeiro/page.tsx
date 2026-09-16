@@ -14,6 +14,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { Cabecalho, Modal } from "@/components/ui";
+import { Protegido } from "@/components/Protegido";
 import { useDados, novoId } from "@/lib/store";
 import { calcularTotais, lucroTotal } from "@/lib/calc";
 import { brl, dataBR, hojeISO, paraCampo, paraNumero } from "@/lib/format";
@@ -44,6 +45,14 @@ const FORM_VAZIO: Formulario = {
 };
 
 export default function FinanceiroPage() {
+  return (
+    <Protegido chave="financeiro">
+      <FinanceiroPageInterno />
+    </Protegido>
+  );
+}
+
+function FinanceiroPageInterno() {
   const {
     pedidos,
     pagamentos,

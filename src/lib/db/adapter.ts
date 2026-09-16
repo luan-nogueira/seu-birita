@@ -22,6 +22,7 @@ export const COLECOES = [
   "movimentos",
   "pedidosClientes",
   "contasPagar",
+  "usuarios",
 ] as const;
 
 export type NomeColecao = (typeof COLECOES)[number];

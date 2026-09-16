@@ -3,10 +3,19 @@
 import { useMemo, useState } from "react";
 import { Cabecalho } from "@/components/ui";
 import { ModalAgendarEvento } from "@/components/ModalAgendarEvento";
+import { Protegido } from "@/components/Protegido";
 import { useDados } from "@/lib/store";
 import { Calendar, MapPin, Phone, Package, Info, Plus } from "lucide-react";
 
 export default function AgendaPage() {
+  return (
+    <Protegido chave="agenda">
+      <AgendaPageInterno />
+    </Protegido>
+  );
+}
+
+function AgendaPageInterno() {
   const { pedidosClientes } = useDados();
   const [agendarAberto, setAgendarAberto] = useState(false);
 

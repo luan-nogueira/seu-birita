@@ -13,6 +13,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { Cabecalho, Modal } from "@/components/ui";
+import { Protegido } from "@/components/Protegido";
 import { useDados } from "@/lib/store";
 import { brl, dataBR, dataHoraBR, telefoneBR } from "@/lib/format";
 import { EMPRESA } from "@/lib/empresa";
@@ -60,6 +61,14 @@ function StatusChip({ status }: { status: PedidoClienteStatus }) {
 /* -------------------------------------------------------------------------- */
 
 export default function PedidosClientesPage() {
+  return (
+    <Protegido chave="online">
+      <PedidosClientesPageInterno />
+    </Protegido>
+  );
+}
+
+function PedidosClientesPageInterno() {
   const {
     pedidosClientes,
     pedidosClientesNovos,

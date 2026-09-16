@@ -10,6 +10,7 @@ import {
   Home,
   LogOut,
   Package,
+  ShieldCheck,
   ShoppingCart,
   Truck,
   Users,
@@ -20,19 +21,22 @@ import { TemaBotao } from "./TemaBotao";
 import { Modal } from "./ui";
 import { useDados } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
+import type { Permissoes } from "@/lib/types";
 
 /** Usado tanto na lateral do desktop quanto na barra do celular (com scroll horizontal). */
 const ITENS = [
-  { href: "/admin", rotulo: "Início", Icone: Home },
-  { href: "/admin/pedidos", rotulo: "Pedidos", Icone: ClipboardList },
-  { href: "/admin/pedidos/clientes", rotulo: "Online", Icone: ShoppingCart },
-  { href: "/admin/agenda", rotulo: "Agenda", Icone: Calendar },
-  { href: "/admin/produtos", rotulo: "Produtos", Icone: Package },
-  { href: "/admin/clientes", rotulo: "Clientes", Icone: Users },
-  { href: "/admin/financeiro", rotulo: "Financeiro", Icone: Wallet },
-  { href: "/admin/estoque", rotulo: "Estoque", Icone: Boxes },
-  { href: "/admin/fornecedores", rotulo: "Fornecedores", Icone: Truck },
-];
+  { href: "/admin", rotulo: "Início", Icone: Home, chave: null },
+  { href: "/admin/pedidos", rotulo: "Pedidos", Icone: ClipboardList, chave: "pedidos" },
+  { href: "/admin/pedidos/clientes", rotulo: "Online", Icone: ShoppingCart, chave: "online" },
+  { href: "/admin/agenda", rotulo: "Agenda", Icone: Calendar, chave: "agenda" },
+  { href: "/admin/produtos", rotulo: "Produtos", Icone: Package, chave: "produtos" },
+  { href: "/admin/clientes", rotulo: "Clientes", Icone: Users, chave: "clientes" },
+  { href: "/admin/financeiro", rotulo: "Financeiro", Icone: Wallet, chave: "financeiro" },
+  { href: "/admin/estoque", rotulo: "Estoque", Icone: Boxes, chave: "estoque" },
+  { href: "/admin/fornecedores", rotulo: "Fornecedores", Icone: Truck, chave: "fornecedores" },
+] satisfies { href: string; rotulo: string; Icone: unknown; chave: keyof Permissoes | null }[];
+
+const ITEM_EQUIPE = { href: "/admin/equipe", rotulo: "Equipe", Icone: ShieldCheck };
 
 /** Telas que qualquer um alcança sem estar logado. */
 const ROTAS_PUBLICAS = ["/login", "/admin/pedido"];
@@ -56,10 +60,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const caminho = usePathname();
   const router = useRouter();
   const { modoDemonstracao, pedidosClientesNovos } = useDados();
-  const { usuario, carregando, exigeLogin, sair } = useAuth();
+  const { usuario, carregando, exigeLogin, sair, permissoes, ehAdmin } = useAuth();
 
   const precisaEntrar = exigeLogin && !carregando && !usuario;
   const publica = ehPublica(caminho);
+
+  const itensPermitidos = ITENS.filter((i) => !i.chave || permissoes[i.chave]);
+  const itensDesktop = ehAdmin ? [...itensPermitidos, ITEM_EQUIPE] : itensPermitidos;
 
   useEffect(() => {
     if (precisaEntrar && !publica) router.replace("/login");
@@ -108,7 +115,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
 
           <nav className="flex flex-col gap-1">
-            {ITENS.map(({ href, rotulo, Icone }) => {
+            {itensDesktop.map(({ href, rotulo, Icone }) => {
               const ativo = estaAtivo(href, caminho);
               const badge =
                 href === "/pedidos/clientes" && pedidosClientesNovos > 0
@@ -168,7 +175,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Navegação inferior — só no celular. Rola de lado: são 9 itens, não cabem numa tela só. */}
       <nav className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t border-borda bg-superficie pb-[env(safe-area-inset-bottom)] [-ms-overflow-style:none] [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden">
-        {ITENS.map(({ href, rotulo, Icone }) => {
+        {itensDesktop.map(({ href, rotulo, Icone }) => {
           const ativo = estaAtivo(href, caminho);
           const badge =
             href === "/pedidos/clientes" && pedidosClientesNovos > 0

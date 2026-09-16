@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Cabecalho, Modal } from "@/components/ui";
+import { Protegido } from "@/components/Protegido";
 import { useDados } from "@/lib/store";
 import { novoId } from "@/lib/db";
 import { brl, dataBR, hojeISO, normalizar } from "@/lib/format";
@@ -32,6 +33,14 @@ function inicioDoMes(): string {
 }
 
 export default function EstoquePage() {
+  return (
+    <Protegido chave="estoque">
+      <EstoquePageInterno />
+    </Protegido>
+  );
+}
+
+function EstoquePageInterno() {
   const {
     movimentos,
     produtos,

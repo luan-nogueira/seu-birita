@@ -12,7 +12,9 @@ import {
   Users,
 } from "lucide-react";
 import { Cabecalho, Modal, Vazio } from "@/components/ui";
+import { Protegido } from "@/components/Protegido";
 import { useDados, novoId } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { brl, normalizar, telefoneBR } from "@/lib/format";
 import type { Cliente } from "@/lib/types";
 
@@ -31,6 +33,14 @@ const FORM_VAZIO: Formulario = {
 };
 
 export default function ClientesPage() {
+  return (
+    <Protegido chave="clientes">
+      <ClientesPageInterno />
+    </Protegido>
+  );
+}
+
+function ClientesPageInterno() {
   const {
     clientes,
     pedidos,
@@ -39,6 +49,7 @@ export default function ClientesPage() {
     pendenciaDoCliente,
     carregando,
   } = useDados();
+  const { permissoes } = useAuth();
 
   const [busca, setBusca] = useState("");
   const [editando, setEditando] = useState<Cliente | null>(null);
@@ -209,13 +220,15 @@ export default function ClientesPage() {
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
-                  <button
-                      className="grid h-9 w-9 place-items-center rounded-lg text-texto-suave transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
-                      onClick={() => solicitarExclusao(c)}
-                      aria-label={`Excluir ${c.nome}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  {permissoes.excluir && (
+                    <button
+                        className="grid h-9 w-9 place-items-center rounded-lg text-texto-suave transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                        onClick={() => solicitarExclusao(c)}
+                        aria-label={`Excluir ${c.nome}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
 

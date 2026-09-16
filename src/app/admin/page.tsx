@@ -20,12 +20,14 @@ import {
 import { Cabecalho, StatusChip } from "@/components/ui";
 import { ModalAgendarEvento } from "@/components/ModalAgendarEvento";
 import { useDados } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { calcularTotais, lucroTotal } from "@/lib/calc";
 import { brl, dataBR, hojeISO } from "@/lib/format";
 
 export default function InicioPage() {
   const { pedidos, produtos, clientes, fornecedores, contasPagar, carregando } =
     useDados();
+  const { permissoes } = useAuth();
   const [agendarAberto, setAgendarAberto] = useState(false);
 
   const ativos = pedidos.filter((p) => p.status !== "CANCELADO");
@@ -71,14 +73,18 @@ export default function InicioPage() {
         }
         acao={
           <div className="flex flex-wrap gap-2">
-            <button className="btn-primario" onClick={() => setAgendarAberto(true)}>
-              <Plus className="h-4 w-4" />
-              Agendar evento
-            </button>
-            <Link href="/admin/pedidos" className="btn-primario">
-              <Plus className="h-4 w-4" />
-              Novo pedido
-            </Link>
+            {permissoes.agenda && (
+              <button className="btn-primario" onClick={() => setAgendarAberto(true)}>
+                <Plus className="h-4 w-4" />
+                Agendar evento
+              </button>
+            )}
+            {permissoes.pedidos && (
+              <Link href="/admin/pedidos" className="btn-primario">
+                <Plus className="h-4 w-4" />
+                Novo pedido
+              </Link>
+            )}
           </div>
         }
       />
@@ -91,71 +97,83 @@ export default function InicioPage() {
       <div className="space-y-6 px-4 md:px-6">
         {/* --------------------------- Números --------------------------- */}
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          <Cartao
-            Icone={Wallet}
-            rotulo="A receber"
-            valor={brl(aReceber)}
-            detalhe={`${emAberto.length} pedido(s) em aberto`}
-            destaque={aReceber > 0}
-          />
-          <Cartao
-            Icone={TrendingDown}
-            rotulo="A pagar"
-            valor={brl(aPagar)}
-            detalhe={
-              contasVencidas.length > 0
-                ? `${contasVencidas.length} conta(s) vencida(s)`
-                : `${contasPendentes.length} conta(s) pendente(s)`
-            }
-            destaque={contasVencidas.length > 0}
-          />
-          <Cartao
-            Icone={TrendingUp}
-            rotulo="Faturado no mês"
-            valor={brl(faturadoMes)}
-            detalhe={
-              <input
-                type="month"
-                value={mesFiltro}
-                onChange={(e) => setMesFiltro(e.target.value)}
-                className="bg-transparent outline-none cursor-pointer w-full text-texto-suave"
+          {permissoes.financeiro && (
+            <>
+              <Cartao
+                Icone={Wallet}
+                rotulo="A receber"
+                valor={brl(aReceber)}
+                detalhe={`${emAberto.length} pedido(s) em aberto`}
+                destaque={aReceber > 0}
               />
-            }
-          />
-          <Cartao
-            Icone={PiggyBank}
-            rotulo="Lucro no mês"
-            valor={brl(lucroMes)}
-            detalhe={faturadoMes > 0 ? `${margemMes.toFixed(0)}% de margem` : "sem faturamento"}
-          />
-          <Cartao
-            Icone={CalendarDays}
-            rotulo="Eventos no mês"
-            valor={String(pedidosDoMes.length)}
-            detalhe="pedidos no período"
-          />
-          <Cartao
-            Icone={ClipboardList}
-            rotulo="Pedidos"
-            valor={String(ativos.length)}
-            detalhe="no histórico"
-          />
-          <Cartao
-            Icone={Users}
-            rotulo="Clientes"
-            valor={String(clientes.filter((c) => c.ativo).length)}
-            detalhe="ativos"
-          />
-          <Cartao
-            Icone={Truck}
-            rotulo="Fornecedores"
-            valor={String(fornecedores.filter((f) => f.ativo).length)}
-            detalhe="cadastrados"
-          />
+              <Cartao
+                Icone={TrendingDown}
+                rotulo="A pagar"
+                valor={brl(aPagar)}
+                detalhe={
+                  contasVencidas.length > 0
+                    ? `${contasVencidas.length} conta(s) vencida(s)`
+                    : `${contasPendentes.length} conta(s) pendente(s)`
+                }
+                destaque={contasVencidas.length > 0}
+              />
+              <Cartao
+                Icone={TrendingUp}
+                rotulo="Faturado no mês"
+                valor={brl(faturadoMes)}
+                detalhe={
+                  <input
+                    type="month"
+                    value={mesFiltro}
+                    onChange={(e) => setMesFiltro(e.target.value)}
+                    className="bg-transparent outline-none cursor-pointer w-full text-texto-suave"
+                  />
+                }
+              />
+              <Cartao
+                Icone={PiggyBank}
+                rotulo="Lucro no mês"
+                valor={brl(lucroMes)}
+                detalhe={faturadoMes > 0 ? `${margemMes.toFixed(0)}% de margem` : "sem faturamento"}
+              />
+            </>
+          )}
+          {permissoes.pedidos && (
+            <>
+              <Cartao
+                Icone={CalendarDays}
+                rotulo="Eventos no mês"
+                valor={String(pedidosDoMes.length)}
+                detalhe="pedidos no período"
+              />
+              <Cartao
+                Icone={ClipboardList}
+                rotulo="Pedidos"
+                valor={String(ativos.length)}
+                detalhe="no histórico"
+              />
+            </>
+          )}
+          {permissoes.clientes && (
+            <Cartao
+              Icone={Users}
+              rotulo="Clientes"
+              valor={String(clientes.filter((c) => c.ativo).length)}
+              detalhe="ativos"
+            />
+          )}
+          {permissoes.fornecedores && (
+            <Cartao
+              Icone={Truck}
+              rotulo="Fornecedores"
+              valor={String(fornecedores.filter((f) => f.ativo).length)}
+              detalhe="cadastrados"
+            />
+          )}
         </div>
 
         {/* ------------------------ Contas em aberto ---------------------- */}
-        {emAberto.length > 0 && (
+        {permissoes.financeiro && emAberto.length > 0 && (
           <section>
             <h2 className="mb-2 flex items-center gap-2 text-sm font-bold">
               <AlertTriangle className="h-4 w-4 text-acento" />
@@ -191,7 +209,7 @@ export default function InicioPage() {
         )}
 
         {/* ------------------------ Contas a pagar ------------------------ */}
-        {contasPendentes.length > 0 && (
+        {permissoes.financeiro && contasPendentes.length > 0 && (
           <section>
             <div className="mb-2 flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-sm font-bold">
@@ -238,6 +256,7 @@ export default function InicioPage() {
         )}
 
         {/* -------------------------- Últimos pedidos --------------------- */}
+        {permissoes.pedidos && (
         <section>
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-sm font-bold">Últimos pedidos</h2>
@@ -296,6 +315,7 @@ export default function InicioPage() {
             </ul>
           )}
         </section>
+        )}
       </div>
     </>
   );

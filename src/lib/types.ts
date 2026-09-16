@@ -155,6 +155,49 @@ export interface EstoqueMovimento {
   criadoEm: string;
 }
 
+export type PapelUsuario = "admin" | "funcionario";
+
+/** O que um funcionário pode ver/mexer — cada chave liga/desliga uma parte do sistema. */
+export interface Permissoes {
+  pedidos: boolean;
+  online: boolean;
+  agenda: boolean;
+  produtos: boolean;
+  clientes: boolean;
+  financeiro: boolean;
+  estoque: boolean;
+  fornecedores: boolean;
+  /** Ver preço de custo, margem e lucro — mesmo em telas que ele já acessa. */
+  verCusto: boolean;
+  /** Excluir cadastros (produto, cliente, fornecedor, pedido). */
+  excluir: boolean;
+}
+
+export const PERMISSOES_PADRAO_FUNCIONARIO: Permissoes = {
+  pedidos: true,
+  online: true,
+  agenda: true,
+  produtos: true,
+  clientes: true,
+  financeiro: false,
+  estoque: true,
+  fornecedores: false,
+  verCusto: false,
+  excluir: false,
+};
+
+/** Perfil de acesso — um documento por uid do Firebase Auth. */
+export interface Usuario {
+  id: string;
+  email: string;
+  nome: string;
+  papel: PapelUsuario;
+  permissoes: Permissoes;
+  /** false = acesso revogado (login continua existindo, mas não vê nada). */
+  ativo: boolean;
+  criadoEm: string;
+}
+
 /** Uma despesa/conta a pagar — fornecedor, aluguel, combustível, etc. */
 export interface ContaPagar {
   id: string;

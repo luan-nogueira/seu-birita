@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { Modal, StatusChip, TipoChip } from "@/components/ui";
 import { CampoQtd } from "@/components/CampoQtd";
+import { Protegido } from "@/components/Protegido";
+import { useAuth } from "@/lib/auth";
 import { useDados, novoId } from "@/lib/store";
 import {
   calcularTotais,
@@ -66,8 +68,17 @@ const ROTULO_STATUS: Record<PedidoStatus, string> = {
 };
 
 export default function PedidoPage() {
+  return (
+    <Protegido chave="pedidos">
+      <PedidoPageInterno />
+    </Protegido>
+  );
+}
+
+function PedidoPageInterno() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { permissoes } = useAuth();
   const {
     pedidoPorId,
     salvarPedido,
@@ -367,10 +378,12 @@ export default function PedidoPage() {
 
         <div className="flex flex-wrap gap-2 border-t border-borda pt-5">
           <CompartilharWhatsApp pedido={pedido} />
-          <button className="btn-perigo ml-auto" onClick={solicitarExclusaoPedido}>
-            <Trash2 className="h-4 w-4" />
-            Excluir pedido
-          </button>
+          {permissoes.excluir && (
+            <button className="btn-perigo ml-auto" onClick={solicitarExclusaoPedido}>
+              <Trash2 className="h-4 w-4" />
+              Excluir pedido
+            </button>
+          )}
         </div>
       </div>
 
@@ -460,6 +473,7 @@ function Resumo({
   totais: ReturnType<typeof calcularTotais>;
 }) {
   const consignacao = pedido.tipo === "CONSIGNACAO";
+  const { permissoes } = useAuth();
 
   return (
     <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
@@ -523,17 +537,19 @@ function Resumo({
         </p>
       </div>
 
-      <div className="card px-4 py-3 border-emerald-500/40 bg-emerald-500/10 col-span-2 lg:col-span-1">
-        <p className="text-[11px] font-semibold tracking-wide text-emerald-800 dark:text-emerald-400 uppercase">
-          {pedido.status === "FINALIZADO" || pedido.status === "ACERTO" ? "Lucro do Evento" : "Lucro Previsto"}
-        </p>
-        <p className="mt-1 text-xl font-black tabular-nums text-emerald-700 dark:text-emerald-500">
-          {brl(totais.lucro)}
-        </p>
-        <p className="mt-0.5 text-xs text-emerald-600/80 dark:text-emerald-500/80">
-          Custo total: {brl(totais.custoTotal)}
-        </p>
-      </div>
+      {permissoes.verCusto && (
+        <div className="card px-4 py-3 border-emerald-500/40 bg-emerald-500/10 col-span-2 lg:col-span-1">
+          <p className="text-[11px] font-semibold tracking-wide text-emerald-800 dark:text-emerald-400 uppercase">
+            {pedido.status === "FINALIZADO" || pedido.status === "ACERTO" ? "Lucro do Evento" : "Lucro Previsto"}
+          </p>
+          <p className="mt-1 text-xl font-black tabular-nums text-emerald-700 dark:text-emerald-500">
+            {brl(totais.lucro)}
+          </p>
+          <p className="mt-0.5 text-xs text-emerald-600/80 dark:text-emerald-500/80">
+            Custo total: {brl(totais.custoTotal)}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

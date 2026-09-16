@@ -20,6 +20,7 @@ import type {
   Pedido,
   PedidoCliente,
   Produto,
+  Usuario,
 } from "./types";
 
 interface Dados {
@@ -33,6 +34,7 @@ interface Dados {
   contasPagar: ContaPagar[];
   /** Quantidade de pedidos com status NOVO — para o badge da navegação */
   pedidosClientesNovos: number;
+  usuarios: Usuario[];
   carregando: boolean;
   modoDemonstracao: boolean;
 
@@ -51,6 +53,8 @@ interface Dados {
   removerPedidoCliente: (id: string) => Promise<void>;
   salvarContaPagar: (c: ContaPagar) => Promise<void>;
   removerContaPagar: (id: string) => Promise<void>;
+  salvarUsuario: (u: Usuario) => Promise<void>;
+  removerUsuario: (id: string) => Promise<void>;
 
   proximoNumeroPedido: () => number;
   proximoNumeroPedidoCliente: () => number;
@@ -128,7 +132,7 @@ export function DadosProvider({ children }: { children: React.ReactNode }) {
   const [prontas, setProntas] = useState(0);
   const marcarPronta = useCallback(() => setProntas((n) => n + 1), []);
 
-  const { usuario, exigeLogin, carregando: authCarregando } = useAuth();
+  const { usuario, exigeLogin, ehAdmin, carregando: authCarregando } = useAuth();
   // Só escuta coleções protegidas quando está logado (ou em modo demonstração
   // sem Firebase, onde não há autenticação — exigeLogin === false).
   const logado = !exigeLogin || !!usuario;
@@ -144,6 +148,10 @@ export function DadosProvider({ children }: { children: React.ReactNode }) {
   const movimentos = useColecaoProtegida<EstoqueMovimento>("movimentos", marcarPronta, logado);
   const pedidosClientes = useColecaoProtegida<PedidoCliente>("pedidosClientes", marcarPronta, logado);
   const contasPagar = useColecaoProtegida<ContaPagar>("contasPagar", marcarPronta, logado);
+  // Só admin pode listar a coleção inteira de usuários (a regra do Firestore
+  // só libera "list" pra admin — um funcionário só lê o próprio documento,
+  // isso é feito à parte em auth.tsx).
+  const usuarios = useColecaoProtegida<Usuario>("usuarios", marcarPronta, logado && ehAdmin);
 
   const valor = useMemo<Dados>(() => {
     const produtosOrdenados = [...produtos].sort((a, b) =>
@@ -179,9 +187,10 @@ export function DadosProvider({ children }: { children: React.ReactNode }) {
       contasPagar: [...contasPagar].sort((a, b) =>
         a.vencimento.localeCompare(b.vencimento),
       ),
-      // Aguarda: auth resolvida + 8 coleções respondidas.
+      usuarios: [...usuarios].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
+      // Aguarda: auth resolvida + 9 coleções respondidas.
       // Em modo demonstração authCarregando é sempre false.
-      carregando: authCarregando || prontas < 8,
+      carregando: authCarregando || prontas < 9,
       modoDemonstracao,
 
       salvarProduto: salvarEm<Produto>("produtos"),
@@ -199,6 +208,8 @@ export function DadosProvider({ children }: { children: React.ReactNode }) {
       removerPedidoCliente: removerDe("pedidosClientes"),
       salvarContaPagar: salvarEm<ContaPagar>("contasPagar"),
       removerContaPagar: removerDe("contasPagar"),
+      salvarUsuario: salvarEm<Usuario>("usuarios"),
+      removerUsuario: removerDe("usuarios"),
 
       proximoNumeroPedido: () =>
         pedidos.reduce((max, p) => Math.max(max, p.numero || 0), 0) + 1,
@@ -219,7 +230,7 @@ export function DadosProvider({ children }: { children: React.ReactNode }) {
           )
           .reduce((soma, p) => soma + calcularTotais(p).saldoAberto, 0),
     };
-  }, [authCarregando, produtos, clientes, fornecedores, pedidos, pagamentos, movimentos, pedidosClientes, contasPagar, prontas]);
+  }, [authCarregando, produtos, clientes, fornecedores, pedidos, pagamentos, movimentos, pedidosClientes, contasPagar, usuarios, prontas]);
 
   return <DadosContext.Provider value={valor}>{children}</DadosContext.Provider>;
 }
