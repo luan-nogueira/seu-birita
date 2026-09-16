@@ -5,7 +5,6 @@ import { useParams } from "next/navigation";
 import { ArrowLeft, Printer } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { useDados } from "@/lib/store";
-import { entregueUn, paraCaixas } from "@/lib/calc";
 import { dataBR, telefoneBR } from "@/lib/format";
 import { EMPRESA } from "@/lib/empresa";
 import type { PedidoItem } from "@/lib/types";
@@ -42,10 +41,13 @@ export default function RomaneioPage() {
   const cliente = clientePorId(pedido.clienteId);
 
   // Só o que tem alguma quantidade a carregar — sem preço, sem totais financeiros.
+  // Soma cx e un exatamente como foram lançados na entrega, sem reconverter
+  // pra caixa fechada — se a pessoa lançou 15 em "un", o romaneio mostra
+  // 15 un, não 1 cx + 3 un.
   const linhas: LinhaRomaneio[] = pedido.itens
     .map((item) => {
-      const totalUn = entregueUn(item);
-      const { cx, un } = paraCaixas(totalUn, item.unPorCaixa);
+      const cx = item.entregas.reduce((s, r) => s + r.cx, 0);
+      const un = item.entregas.reduce((s, r) => s + r.un, 0);
       const categoria = produtoPorId(item.produtoId)?.categoria || "Outros";
       return { item, categoria, cx, un };
     })
