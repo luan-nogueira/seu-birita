@@ -1107,9 +1107,6 @@ function Fechamento({
   aoMudar: (m: Partial<Pedido>) => void;
 }) {
   const [desconto, setDesconto] = useState(paraCampo(pedido.desconto));
-  const [pendencia, setPendencia] = useState(
-    paraCampo(pedido.pendenciaAnterior),
-  );
 
   return (
     <section className="card p-4">
@@ -1130,26 +1127,6 @@ function Fechamento({
               onChange={(e) => setDesconto(e.target.value)}
               onBlur={() => aoMudar({ desconto: paraNumero(desconto) })}
             />
-          </div>
-
-          <div>
-            <label className="rotulo" htmlFor="f-pendencia">
-              Pendência anterior
-            </label>
-            <input
-              id="f-pendencia"
-              className="campo"
-              inputMode="decimal"
-              placeholder="0,00"
-              value={pendencia}
-              onChange={(e) => setPendencia(e.target.value)}
-              onBlur={() =>
-                aoMudar({ pendenciaAnterior: paraNumero(pendencia) })
-              }
-            />
-            <p className="mt-1 text-xs text-texto-suave">
-              Valor que o cliente já devia de acertos anteriores.
-            </p>
           </div>
 
           <div>
