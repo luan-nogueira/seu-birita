@@ -16,9 +16,10 @@ import {
 import { Cabecalho, Modal } from "@/components/ui";
 import { Protegido } from "@/components/Protegido";
 import { useDados, novoId } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { calcularTotais, lucroTotal } from "@/lib/calc";
 import { brl, dataBR, hojeISO, paraCampo, paraNumero } from "@/lib/format";
-import type { ContaPagar } from "@/lib/types";
+import type { ContaPagar, Pagamento } from "@/lib/types";
 
 const ROTULO_FORMA: Record<string, string> = {
   PIX: "Pix",
@@ -61,8 +62,12 @@ function FinanceiroPageInterno() {
     contasPagar,
     salvarContaPagar,
     removerContaPagar,
+    salvarPedido,
+    removerPagamento,
     carregando,
   } = useDados();
+  const { permissoes } = useAuth();
+  const [excluindoPagamento, setExcluindoPagamento] = useState<Pagamento | null>(null);
 
   const ativos = useMemo(
     () => pedidos.filter((p) => p.status !== "CANCELADO" && p.status !== "RASCUNHO"),
@@ -123,6 +128,28 @@ function FinanceiroPageInterno() {
     () => [...pagamentos].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 12),
     [pagamentos],
   );
+
+  async function confirmarExclusaoPagamento() {
+    if (!excluindoPagamento) return;
+    const pedido = pedidos.find((p) => p.id === excluindoPagamento.pedidoId);
+    if (pedido) {
+      // Sem isso, o pedido continua achando que recebeu esse valor mesmo
+      // depois de apagar o pagamento (mesmo bug que já corrigimos ao
+      // excluir o pedido inteiro — o pagamento não pode ficar "fantasma").
+      const novoValorPago = Math.max(0, (pedido.valorPago || 0) - excluindoPagamento.valor);
+      const totais = calcularTotais(pedido);
+      const aindaQuitado = novoValorPago >= totais.totalReceber - 0.005;
+      await salvarPedido({
+        ...pedido,
+        valorPago: novoValorPago,
+        status:
+          pedido.status === "FINALIZADO" && !aindaQuitado ? "ACERTO" : pedido.status,
+        atualizadoEm: new Date().toISOString(),
+      });
+    }
+    await removerPagamento(excluindoPagamento.id);
+    setExcluindoPagamento(null);
+  }
 
   const contasOrdenadas = useMemo(
     () =>
@@ -413,6 +440,15 @@ function FinanceiroPageInterno() {
                     <span className="shrink-0 font-bold text-emerald-600 tabular-nums">
                       {brl(pg.valor)}
                     </span>
+                    {permissoes.excluir && (
+                      <button
+                        className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-texto-suave transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                        onClick={() => setExcluindoPagamento(pg)}
+                        aria-label={`Excluir recebimento de ${cliente?.nome ?? "cliente"}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </li>
                 );
               })}
@@ -420,6 +456,27 @@ function FinanceiroPageInterno() {
           )}
         </section>
       </div>
+
+      <Modal
+        aberto={!!excluindoPagamento}
+        aoFechar={() => setExcluindoPagamento(null)}
+        titulo="Excluir recebimento"
+        rodape={
+          <>
+            <button className="btn-secundario" onClick={() => setExcluindoPagamento(null)}>
+              Cancelar
+            </button>
+            <button className="btn-perigo" onClick={confirmarExclusaoPagamento}>
+              Excluir
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-texto-suave">
+          {excluindoPagamento &&
+            `Excluir o recebimento de ${brl(excluindoPagamento.valor)}? O valor volta a aparecer como pendente no pedido.`}
+        </p>
+      </Modal>
 
       <Modal
         aberto={aberto}
