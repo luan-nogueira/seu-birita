@@ -165,6 +165,7 @@ function FinanceiroPageInterno() {
   const [editando, setEditando] = useState<ContaPagar | null>(null);
   const [form, setForm] = useState<Formulario>(FORM_VAZIO);
   const [aberto, setAberto] = useState(false);
+  const [salvandoConta, setSalvandoConta] = useState(false);
   const [excluindo, setExcluindo] = useState<ContaPagar | null>(null);
 
   function abrirNova() {
@@ -186,23 +187,29 @@ function FinanceiroPageInterno() {
   }
 
   async function salvar() {
+    if (salvandoConta) return;
     const descricao = form.descricao.trim();
     const valor = paraNumero(form.valor);
     if (!descricao || valor <= 0) return;
-    const fornecedor = fornecedores.find((f) => f.id === form.fornecedorId);
-    await salvarContaPagar({
-      id: editando?.id ?? novoId(),
-      descricao,
-      fornecedorId: fornecedor?.id,
-      fornecedorNome: fornecedor?.nome,
-      valor,
-      vencimento: form.vencimento || hojeISO(),
-      obs: form.obs.trim() || undefined,
-      pago: editando?.pago ?? false,
-      pagoEm: editando?.pagoEm,
-      criadoEm: editando?.criadoEm ?? new Date().toISOString(),
-    });
-    setAberto(false);
+    setSalvandoConta(true);
+    try {
+      const fornecedor = fornecedores.find((f) => f.id === form.fornecedorId);
+      await salvarContaPagar({
+        id: editando?.id ?? novoId(),
+        descricao,
+        fornecedorId: fornecedor?.id,
+        fornecedorNome: fornecedor?.nome,
+        valor,
+        vencimento: form.vencimento || hojeISO(),
+        obs: form.obs.trim() || undefined,
+        pago: editando?.pago ?? false,
+        pagoEm: editando?.pagoEm,
+        criadoEm: editando?.criadoEm ?? new Date().toISOString(),
+      });
+      setAberto(false);
+    } finally {
+      setSalvandoConta(false);
+    }
   }
 
   async function alternarPago(c: ContaPagar) {
@@ -487,15 +494,15 @@ function FinanceiroPageInterno() {
         titulo={editando ? "Editar conta a pagar" : "Nova conta a pagar"}
         rodape={
           <>
-            <button className="btn-secundario" onClick={() => setAberto(false)}>
+            <button className="btn-secundario" onClick={() => setAberto(false)} disabled={salvandoConta}>
               Cancelar
             </button>
             <button
               className="btn-primario"
               onClick={salvar}
-              disabled={!form.descricao.trim() || paraNumero(form.valor) <= 0}
+              disabled={salvandoConta || !form.descricao.trim() || paraNumero(form.valor) <= 0}
             >
-              Salvar
+              {salvandoConta ? "Salvando…" : "Salvar"}
             </button>
           </>
         }

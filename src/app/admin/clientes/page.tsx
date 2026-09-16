@@ -55,6 +55,7 @@ function ClientesPageInterno() {
   const [editando, setEditando] = useState<Cliente | null>(null);
   const [form, setForm] = useState<Formulario>(FORM_VAZIO);
   const [aberto, setAberto] = useState(false);
+  const [salvando, setSalvando] = useState(false);
   const [excluindoCliente, setExcluindoCliente] = useState<Cliente | null>(null);
 
   const filtrados = useMemo(() => {
@@ -91,15 +92,21 @@ function ClientesPageInterno() {
   }
 
   async function salvar() {
+    if (salvando) return;
     const nome = form.nome.trim();
     if (!nome) return;
-    await salvarCliente({
-      ...form,
-      nome,
-      id: editando?.id ?? novoId(),
-      criadoEm: editando?.criadoEm ?? new Date().toISOString(),
-    });
-    setAberto(false);
+    setSalvando(true);
+    try {
+      await salvarCliente({
+        ...form,
+        nome,
+        id: editando?.id ?? novoId(),
+        criadoEm: editando?.criadoEm ?? new Date().toISOString(),
+      });
+      setAberto(false);
+    } finally {
+      setSalvando(false);
+    }
   }
 
   function solicitarExclusao(c: Cliente) {
@@ -251,15 +258,15 @@ function ClientesPageInterno() {
         titulo={editando ? "Editar cliente" : "Novo cliente"}
         rodape={
           <>
-            <button className="btn-secundario" onClick={() => setAberto(false)}>
+            <button className="btn-secundario" onClick={() => setAberto(false)} disabled={salvando}>
               Cancelar
             </button>
             <button
               className="btn-primario"
               onClick={salvar}
-              disabled={!form.nome.trim()}
+              disabled={salvando || !form.nome.trim()}
             >
-              Salvar
+              {salvando ? "Salvando…" : "Salvar"}
             </button>
           </>
         }

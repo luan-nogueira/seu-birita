@@ -29,6 +29,7 @@ function formVazio() {
 export function ModalAgendarEvento({ aberto, aoFechar }: Props) {
   const { salvarPedidoCliente, proximoNumeroPedidoCliente } = useDados();
   const [form, setForm] = useState(formVazio());
+  const [salvando, setSalvando] = useState(false);
 
   function fechar() {
     setForm(formVazio());
@@ -36,26 +37,32 @@ export function ModalAgendarEvento({ aberto, aoFechar }: Props) {
   }
 
   async function salvar() {
+    if (salvando) return;
     const nomeCliente = form.nomeCliente.trim();
     if (!nomeCliente || !form.dataEvento) return;
 
-    const agora = new Date().toISOString();
-    const pedido: PedidoCliente = {
-      id: novoId(),
-      numero: proximoNumeroPedidoCliente(),
-      nomeCliente,
-      telefone: form.telefone.trim(),
-      localEvento: form.localEvento.trim(),
-      dataEvento: form.dataEvento,
-      obs: form.obs.trim() || undefined,
-      itens: [],
-      valorTotal: 0,
-      status: "CONFIRMADO",
-      criadoEm: agora,
-      atualizadoEm: agora,
-    };
-    await salvarPedidoCliente(pedido);
-    fechar();
+    setSalvando(true);
+    try {
+      const agora = new Date().toISOString();
+      const pedido: PedidoCliente = {
+        id: novoId(),
+        numero: proximoNumeroPedidoCliente(),
+        nomeCliente,
+        telefone: form.telefone.trim(),
+        localEvento: form.localEvento.trim(),
+        dataEvento: form.dataEvento,
+        obs: form.obs.trim() || undefined,
+        itens: [],
+        valorTotal: 0,
+        status: "CONFIRMADO",
+        criadoEm: agora,
+        atualizadoEm: agora,
+      };
+      await salvarPedidoCliente(pedido);
+      fechar();
+    } finally {
+      setSalvando(false);
+    }
   }
 
   return (
@@ -65,15 +72,15 @@ export function ModalAgendarEvento({ aberto, aoFechar }: Props) {
       titulo="Agendar evento"
       rodape={
         <>
-          <button className="btn-secundario" onClick={fechar}>
+          <button className="btn-secundario" onClick={fechar} disabled={salvando}>
             Cancelar
           </button>
           <button
             className="btn-primario"
             onClick={salvar}
-            disabled={!form.nomeCliente.trim() || !form.dataEvento}
+            disabled={salvando || !form.nomeCliente.trim() || !form.dataEvento}
           >
-            Agendar
+            {salvando ? "Salvando…" : "Agendar"}
           </button>
         </>
       }

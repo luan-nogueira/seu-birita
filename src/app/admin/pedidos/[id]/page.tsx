@@ -1224,6 +1224,7 @@ function RegistrarPagamento({
   const [valor, setValor] = useState("");
   const [forma, setForma] = useState<FormaPagamento>("PIX");
   const [data, setData] = useState(hojeISO());
+  const [salvando, setSalvando] = useState(false);
 
   function abrir() {
     setValor(paraCampo(Math.max(0, totais.saldoAberto)));
@@ -1231,31 +1232,39 @@ function RegistrarPagamento({
   }
 
   async function registrar() {
+    // Sem essa trava, ficar clicando enquanto salva (ex: com internet lenta)
+    // registrava um pagamento novo a cada clique.
+    if (salvando) return;
     const v = paraNumero(valor);
     if (v <= 0) return;
 
-    await salvarPagamento({
-      id: novoId(),
-      pedidoId: pedido.id,
-      clienteId: pedido.clienteId,
-      valor: v,
-      forma,
-      data,
-      criadoEm: new Date().toISOString(),
-    });
+    setSalvando(true);
+    try {
+      await salvarPagamento({
+        id: novoId(),
+        pedidoId: pedido.id,
+        clienteId: pedido.clienteId,
+        valor: v,
+        forma,
+        data,
+        criadoEm: new Date().toISOString(),
+      });
 
-    const novoTotalPago = (pedido.valorPago || 0) + v;
-    aoMudar({
-      valorPago: novoTotalPago,
-      // Quitou tudo? O pedido fecha sozinho.
-      status:
-        novoTotalPago >= totais.totalReceber - 0.005
-          ? "FINALIZADO"
-          : pedido.status === "RASCUNHO"
-            ? "ACERTO"
-            : pedido.status,
-    });
-    setAberto(false);
+      const novoTotalPago = (pedido.valorPago || 0) + v;
+      aoMudar({
+        valorPago: novoTotalPago,
+        // Quitou tudo? O pedido fecha sozinho.
+        status:
+          novoTotalPago >= totais.totalReceber - 0.005
+            ? "FINALIZADO"
+            : pedido.status === "RASCUNHO"
+              ? "ACERTO"
+              : pedido.status,
+      });
+      setAberto(false);
+    } finally {
+      setSalvando(false);
+    }
   }
 
   return (
@@ -1274,15 +1283,16 @@ function RegistrarPagamento({
             <button
               className="btn-secundario"
               onClick={() => setAberto(false)}
+              disabled={salvando}
             >
               Cancelar
             </button>
             <button
               className="btn-primario"
               onClick={registrar}
-              disabled={paraNumero(valor) <= 0}
+              disabled={salvando || paraNumero(valor) <= 0}
             >
-              Confirmar
+              {salvando ? "Salvando…" : "Confirmar"}
             </button>
           </>
         }

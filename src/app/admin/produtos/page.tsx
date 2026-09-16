@@ -72,6 +72,7 @@ function ProdutosPageInterno() {
   const [fazendoUpload, setFazendoUpload] = useState(false);
   const [excluindoProduto, setExcluindoProduto] = useState<Produto | null>(null);
   const [recuperando, setRecuperando] = useState(false);
+  const [salvandoProduto, setSalvandoProduto] = useState(false);
 
   async function recuperarIniciais() {
     if (!confirm("Isso vai adicionar as 35 bebidas da versão de demonstração. Continuar?")) return;
@@ -185,10 +186,13 @@ function ProdutosPageInterno() {
   }
 
   async function salvar() {
+    if (salvandoProduto) return;
     const nome = form.nome.trim();
     if (!nome) return;
 
+    setSalvandoProduto(true);
     const agora = new Date().toISOString();
+    try {
     await salvarProduto({
       id: editando?.id ?? novoId(),
       nome,
@@ -208,7 +212,10 @@ function ProdutosPageInterno() {
       criadoEm: editando?.criadoEm ?? agora,
       atualizadoEm: agora,
     });
-    setModalAberto(false);
+      setModalAberto(false);
+    } finally {
+      setSalvandoProduto(false);
+    }
   }
 
   function solicitarExclusao(p: Produto) {
@@ -374,15 +381,16 @@ function ProdutosPageInterno() {
             <button
               className="btn-secundario"
               onClick={() => setModalAberto(false)}
+              disabled={salvandoProduto}
             >
               Cancelar
             </button>
             <button
               className="btn-primario"
               onClick={salvar}
-              disabled={!form.nome.trim()}
+              disabled={salvandoProduto || !form.nome.trim()}
             >
-              Salvar
+              {salvandoProduto ? "Salvando…" : "Salvar"}
             </button>
           </>
         }
