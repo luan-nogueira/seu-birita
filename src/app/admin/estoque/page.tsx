@@ -48,12 +48,44 @@ function EstoquePageInterno() {
     salvarMovimento,
     salvarProduto,
     produtoPorId,
+    pedidoPorId,
+    removerMovimento,
   } = useDados();
 
   const [busca, setBusca] = useState("");
   const [produtoHistorico, setProdutoHistorico] = useState<Produto | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  const [limpandoOrfaos, setLimpandoOrfaos] = useState(false);
+
+  // Lançamentos de pedidos que já foram excluídos antes da correção que
+  // passou a limpar o histórico junto — só sujeira visual, não afeta a
+  // quantidade em estoque (já foi corrigida na hora da exclusão).
+  const orfaos = useMemo(
+    () =>
+      movimentos.filter(
+        (m) =>
+          m.referenciaId &&
+          (m.origem === "PEDIDO" || m.origem === "DEVOLUCAO") &&
+          !pedidoPorId(m.referenciaId),
+      ),
+    [movimentos, pedidoPorId],
+  );
+
+  async function limparOrfaos() {
+    if (limpandoOrfaos) return;
+    if (!window.confirm(`Apagar ${orfaos.length} lançamento(s) de pedidos que já foram excluídos? A quantidade em estoque não muda, só o histórico.`)) {
+      return;
+    }
+    setLimpandoOrfaos(true);
+    try {
+      for (const m of orfaos) {
+        await removerMovimento(m.id);
+      }
+    } finally {
+      setLimpandoOrfaos(false);
+    }
+  }
 
   // Form do lançamento manual
   const [tipoMovimento, setTipoMovimento] = useState<EstoqueOrigem>("COMPRA");
@@ -186,6 +218,28 @@ function EstoquePageInterno() {
           </button>
         }
       />
+
+      {orfaos.length > 0 && (
+        <div className="mx-4 mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-ouro-300 bg-ouro-50 px-4 py-3 text-sm dark:bg-ouro-900/20 md:mx-6">
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold">
+              {orfaos.length} lançamento(s) de pedidos já excluídos no histórico
+            </span>
+            <span className="block text-xs text-texto-suave">
+              Não afeta a quantidade em estoque — só sujeira visual, de antes
+              da correção que passou a limpar isso junto.
+            </span>
+          </span>
+          <button
+            type="button"
+            className="btn-secundario shrink-0 text-xs"
+            onClick={limparOrfaos}
+            disabled={limpandoOrfaos}
+          >
+            {limpandoOrfaos ? "Limpando…" : "Limpar agora"}
+          </button>
+        </div>
+      )}
 
       <div className="px-4 md:px-6">
         <div className="relative mb-4">
