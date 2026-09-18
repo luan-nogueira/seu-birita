@@ -49,6 +49,7 @@ interface Dados {
   salvarPagamento: (p: Pagamento) => Promise<void>;
   removerPagamento: (id: string) => Promise<void>;
   salvarMovimento: (m: EstoqueMovimento) => Promise<void>;
+  removerMovimento: (id: string) => Promise<void>;
   salvarPedidoCliente: (p: PedidoCliente) => Promise<void>;
   removerPedidoCliente: (id: string) => Promise<void>;
   salvarContaPagar: (c: ContaPagar) => Promise<void>;
@@ -204,6 +205,7 @@ export function DadosProvider({ children }: { children: React.ReactNode }) {
       salvarPagamento: salvarEm<Pagamento>("pagamentos"),
       removerPagamento: removerDe("pagamentos"),
       salvarMovimento: salvarEm<EstoqueMovimento>("movimentos"),
+      removerMovimento: removerDe("movimentos"),
       salvarPedidoCliente: salvarEm<PedidoCliente>("pedidosClientes"),
       removerPedidoCliente: removerDe("pedidosClientes"),
       salvarContaPagar: salvarEm<ContaPagar>("contasPagar"),

@@ -21,7 +21,7 @@ import { CampoQtd } from "@/components/CampoQtd";
 import { Protegido } from "@/components/Protegido";
 import { useAuth } from "@/lib/auth";
 import { useDados, novoId } from "@/lib/store";
-import { aplicarAjusteEstoque } from "@/lib/estoque";
+import { aplicarAjusteEstoque, reverterEstoquePedido } from "@/lib/estoque";
 import {
   calcularTotais,
   devolvidoUn,
@@ -86,6 +86,8 @@ function PedidoPageInterno() {
     produtoPorId,
     salvarProduto,
     salvarMovimento,
+    movimentos,
+    removerMovimento,
     carregando,
   } = useDados();
 
@@ -227,12 +229,13 @@ function PedidoPageInterno() {
       await removerPagamento(p.id);
     }
 
-    // Devolve pro estoque tudo que este pedido tinha tirado.
-    await aplicarAjusteEstoque(
+    // Devolve pro estoque tudo que este pedido tinha tirado e apaga o
+    // rastro dele no histórico — senão fica movimentação de um pedido
+    // excluído aparecendo no Estoque.
+    await reverterEstoquePedido(
       ultimoEstoqueAplicado.current ?? efeitoEstoque(pedido!),
-      new Map(),
       pedido!.id,
-      deps,
+      { produtoPorId, salvarProduto, movimentos, removerMovimento },
     );
 
     await removerPedido(pedido!.id);

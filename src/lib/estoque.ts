@@ -1,4 +1,5 @@
 import { novoId } from "./db";
+import { hojeISO } from "./format";
 import type { EstoqueMovimento, Produto } from "./types";
 
 interface DepsEstoque {
@@ -36,7 +37,10 @@ export async function aplicarAjusteEstoque(
       origem: delta > 0 ? "PEDIDO" : "DEVOLUCAO",
       quantidadeUn: Math.abs(delta),
       referenciaId: pedidoId,
-      data: new Date().toISOString(),
+      // Data local (não toISOString) — depois das 21h no fuso do Brasil, o
+      // timestamp UTC já vira o dia seguinte e a movimentação aparecia com
+      // a data errada no histórico do estoque.
+      data: hojeISO(),
       criadoEm: new Date().toISOString(),
     };
     await salvarMovimento(movimento);
@@ -48,5 +52,41 @@ export async function aplicarAjusteEstoque(
       estoqueUn: produto.estoqueUn - delta,
       atualizadoEm: new Date().toISOString(),
     });
+  }
+}
+
+interface DepsReverter {
+  produtoPorId: (id: string) => Produto | undefined;
+  salvarProduto: (p: Produto) => Promise<void>;
+  movimentos: EstoqueMovimento[];
+  removerMovimento: (id: string) => Promise<void>;
+}
+
+/**
+ * Usado ao excluir um pedido: devolve pro estoque o que ele tinha tirado
+ * e APAGA os lançamentos daquele pedido, em vez de criar um novo
+ * lançamento de "devolução" por cima. Se não apagasse, o histórico do
+ * produto ficava cheio de movimentação de um pedido que não existe mais.
+ */
+export async function reverterEstoquePedido(
+  efeito: Map<string, number>,
+  pedidoId: string,
+  { produtoPorId, salvarProduto, movimentos, removerMovimento }: DepsReverter,
+) {
+  for (const [produtoId, antes] of efeito) {
+    if (antes === 0) continue;
+    const produto = produtoPorId(produtoId);
+    if (!produto) continue;
+
+    await salvarProduto({
+      ...produto,
+      estoqueUn: produto.estoqueUn + antes,
+      atualizadoEm: new Date().toISOString(),
+    });
+  }
+
+  const doPedido = movimentos.filter((m) => m.referenciaId === pedidoId);
+  for (const m of doPedido) {
+    await removerMovimento(m.id);
   }
 }

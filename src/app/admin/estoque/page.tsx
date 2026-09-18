@@ -122,7 +122,10 @@ function EstoquePageInterno() {
         quantidadeUn: qtd,
         custoUn,
         fornecedorId: fornecedorId || undefined,
-        data: new Date().toISOString(),
+        // Data local (não toISOString) — depois das 21h no fuso do Brasil,
+        // o timestamp UTC já vira o dia seguinte e a movimentação aparecia
+        // com a data errada no histórico.
+        data: hojeISO(),
         obs: obs || undefined,
         criadoEm: new Date().toISOString(),
       };
