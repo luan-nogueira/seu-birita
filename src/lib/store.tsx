@@ -219,14 +219,16 @@ export function DadosProvider({ children }: { children: React.ReactNode }) {
       clientePorId: (id) => clientes.find((c) => c.id === id),
       pedidoPorId: (id) => pedidos.find((p) => p.id === id),
 
+      // Rascunho não fica de fora daqui — um pedido pode ter saldo real
+      // (ex: pendência anterior lançada nele) mesmo antes de sair do estágio
+      // de rascunho, e essa dívida não pode desaparecer do cálculo.
       pendenciaDoCliente: (clienteId, ignorarPedidoId) =>
         pedidos
           .filter(
             (p) =>
               p.clienteId === clienteId &&
               p.id !== ignorarPedidoId &&
-              p.status !== "CANCELADO" &&
-              p.status !== "RASCUNHO",
+              p.status !== "CANCELADO",
           )
           .reduce((soma, p) => soma + calcularTotais(p).saldoAberto, 0),
     };

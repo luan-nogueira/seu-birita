@@ -218,7 +218,6 @@ function ModalNovoPedido({
 }) {
   const {
     clientes,
-    pedidos,
     salvarPedido,
     proximoNumeroPedido,
     pendenciaDoCliente,
@@ -229,9 +228,12 @@ function ModalNovoPedido({
   const [tipo, setTipo] = useState<PedidoTipo>("CONSIGNACAO");
   const [titulo, setTitulo] = useState("");
   const [dataEvento, setDataEvento] = useState(hojeISO());
-  const [puxarPendencia, setPuxarPendencia] = useState(true);
   const [criando, setCriando] = useState(false);
 
+  // Só informativo agora — cada pedido já soma certinho no "Em aberto por
+  // cliente" (Financeiro) sozinho. Puxar esse valor pra dentro de um pedido
+  // novo (como era antes) inflava o total daquele pedido e, se o antigo
+  // fosse pago à parte, ficava uma dívida fantasma presa no novo.
   const pendencia = clienteId ? pendenciaDoCliente(clienteId) : 0;
 
   async function criar() {
@@ -242,36 +244,6 @@ function ModalNovoPedido({
     const agora = new Date().toISOString();
     const id = novoId();
     const numero = proximoNumeroPedido();
-    const carregarPendencia = puxarPendencia && pendencia > 0;
-
-    // A pendência muda de dono: sai dos pedidos antigos e entra neste.
-    // Sem isso o mesmo valor apareceria em aberto nos dois lugares e o
-    // "a receber" do painel viria dobrado.
-    if (carregarPendencia) {
-      const origens = pedidos.filter(
-        (p) =>
-          p.clienteId === clienteId &&
-          p.status !== "CANCELADO" &&
-          p.status !== "RASCUNHO" &&
-          calcularTotais(p).saldoAberto > 0.005,
-      );
-
-      for (const origem of origens) {
-        const saldo = calcularTotais(origem).saldoAberto;
-        await salvarPedido({
-          ...origem,
-          valorPago: (origem.valorPago || 0) + saldo,
-          status: "FINALIZADO",
-          obs: [
-            origem.obs,
-            `Saldo de ${brl(saldo)} transferido para o pedido #${String(numero).padStart(3, "0")}.`,
-          ]
-            .filter(Boolean)
-            .join("\n"),
-          atualizadoEm: agora,
-        });
-      }
-    }
 
     await salvarPedido({
       id,
@@ -282,7 +254,7 @@ function ModalNovoPedido({
       titulo: titulo.trim() || undefined,
       dataEvento,
       status: "RASCUNHO",
-      pendenciaAnterior: carregarPendencia ? pendencia : 0,
+      pendenciaAnterior: 0,
       desconto: 0,
       itens: [],
       valorPedido: 0,
@@ -385,23 +357,17 @@ function ModalNovoPedido({
         </div>
 
         {pendencia > 0.005 && (
-          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-ouro-300 bg-ouro-50 p-3 dark:bg-ouro-900/20">
-            <input
-              type="checkbox"
-              className="mt-0.5 h-5 w-5 accent-[var(--acento)]"
-              checked={puxarPendencia}
-              onChange={(e) => setPuxarPendencia(e.target.checked)}
-            />
+          <div className="flex items-start gap-3 rounded-xl border border-ouro-300 bg-ouro-50 p-3 dark:bg-ouro-900/20">
             <span className="min-w-0 text-sm">
               <span className="block font-semibold">
-                Trazer pendência de {brl(pendencia)}
+                Este cliente tem {brl(pendencia)} em aberto de outros pedidos
               </span>
               <span className="block text-xs text-texto-suave">
-                Este cliente tem valores em aberto de pedidos anteriores. Some
-                no total deste acerto.
+                Isso já aparece separado no Financeiro — não precisa fazer
+                nada aqui, esse pedido novo começa zerado.
               </span>
             </span>
-          </label>
+          </div>
         )}
       </div>
     </Modal>
