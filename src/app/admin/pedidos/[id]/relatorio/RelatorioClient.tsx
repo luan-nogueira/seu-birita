@@ -18,7 +18,7 @@ import { EMPRESA } from "@/lib/empresa";
 
 export default function RelatorioPage() {
   const { id } = useParams<{ id: string }>();
-  const { pedidoPorId, clientePorId, carregando } = useDados();
+  const { pedidoPorId, clientePorId, produtoPorId, carregando } = useDados();
 
   const pedido = pedidoPorId(id);
 
@@ -44,6 +44,17 @@ export default function RelatorioPage() {
 
   // Itens sem nenhuma movimentação só poluem o documento.
   const itens = pedido.itens.filter((i) => entregueUn(i) > 0);
+
+  const gruposPorCategoria = new Map<string, typeof itens>();
+  itens.forEach((item) => {
+    const categoria = produtoPorId(item.produtoId)?.categoria || "Sem categoria";
+    if (!gruposPorCategoria.has(categoria)) gruposPorCategoria.set(categoria, []);
+    gruposPorCategoria.get(categoria)!.push(item);
+  });
+  const categoriasItens = Array.from(gruposPorCategoria.entries()).sort(([a], [b]) =>
+    a.localeCompare(b, "pt-BR"),
+  );
+  const totalColunas = 5 + (consignacao ? 1 : 0);
 
   return (
     <div className="min-h-dvh bg-neutral-200 print:bg-white">
@@ -159,46 +170,56 @@ export default function RelatorioPage() {
             </tr>
           </thead>
 
-          <tbody>
-            {itens.map((item, i) => {
-              const entregue = entregueUn(item);
-              const devolvido = devolvidoUn(item, pedido.tipo);
-              const saldo = saldoUn(item, pedido.tipo);
-
-              return (
-                <tr
-                  key={`${item.produtoId}-${i}`}
-                  className={i % 2 ? "bg-[#fbf6ee]" : "bg-white"}
+          {categoriasItens.map(([categoria, itensCategoria]) => (
+            <tbody key={categoria}>
+              <tr className="evitar-quebra bg-[#f3dca6]">
+                <td
+                  colSpan={totalColunas}
+                  className="px-2 py-1 text-[10px] font-black tracking-wider text-[#3b1b0e] uppercase"
                 >
-                  <td className="border-b border-neutral-200 px-2 py-1.5">
-                    <span className="font-semibold">{item.nome}</span>
-                    {item.unPorCaixa > 1 && (
-                      <span className="ml-1.5 text-[10px] text-neutral-500">
-                        ({item.unPorCaixa} un/cx)
-                      </span>
-                    )}
-                  </td>
-                  <td className="border-b border-neutral-200 px-2 py-1.5 text-right tabular-nums">
-                    {num(entregue)}
-                  </td>
-                  {consignacao && (
-                    <td className="border-b border-neutral-200 px-2 py-1.5 text-right tabular-nums text-neutral-600">
-                      {devolvido ? num(devolvido) : "—"}
+                  {categoria}
+                </td>
+              </tr>
+              {itensCategoria.map((item, i) => {
+                const entregue = entregueUn(item);
+                const devolvido = devolvidoUn(item, pedido.tipo);
+                const saldo = saldoUn(item, pedido.tipo);
+
+                return (
+                  <tr
+                    key={`${item.produtoId}-${i}`}
+                    className={i % 2 ? "bg-[#fbf6ee]" : "bg-white"}
+                  >
+                    <td className="border-b border-neutral-200 px-2 py-1.5">
+                      <span className="font-semibold">{item.nome}</span>
+                      {item.unPorCaixa > 1 && (
+                        <span className="ml-1.5 text-[10px] text-neutral-500">
+                          ({item.unPorCaixa} un/cx)
+                        </span>
+                      )}
                     </td>
-                  )}
-                  <td className="border-b border-neutral-200 px-2 py-1.5 text-right font-bold tabular-nums">
-                    {num(saldo)}
-                  </td>
-                  <td className="border-b border-neutral-200 px-2 py-1.5 text-right tabular-nums">
-                    {brl(item.precoUn)}
-                  </td>
-                  <td className="border-b border-neutral-200 px-2 py-1.5 text-right font-bold tabular-nums">
-                    {brlOuTraco(valorFinalItem(item, pedido.tipo))}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
+                    <td className="border-b border-neutral-200 px-2 py-1.5 text-right tabular-nums">
+                      {num(entregue)}
+                    </td>
+                    {consignacao && (
+                      <td className="border-b border-neutral-200 px-2 py-1.5 text-right tabular-nums text-neutral-600">
+                        {devolvido ? num(devolvido) : "—"}
+                      </td>
+                    )}
+                    <td className="border-b border-neutral-200 px-2 py-1.5 text-right font-bold tabular-nums">
+                      {num(saldo)}
+                    </td>
+                    <td className="border-b border-neutral-200 px-2 py-1.5 text-right tabular-nums">
+                      {brl(item.precoUn)}
+                    </td>
+                    <td className="border-b border-neutral-200 px-2 py-1.5 text-right font-bold tabular-nums">
+                      {brlOuTraco(valorFinalItem(item, pedido.tipo))}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          ))}
 
           <tfoot>
             <tr className="border-t-2 border-[#3b1b0e] font-bold">
