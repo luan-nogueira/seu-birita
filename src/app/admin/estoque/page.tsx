@@ -147,7 +147,9 @@ function EstoquePageInterno() {
         novoPrecoCusto = totalSoma / totalQtd;
       }
 
-      const novoEstoqueUn = isEntrada ? produto.estoqueUn + qtd : Math.max(0, produto.estoqueUn - qtd);
+      // Sem clamp em 0: negativo avisa que o lançado não bate com a
+      // realidade, em vez de esconder o problema.
+      const novoEstoqueUn = isEntrada ? produto.estoqueUn + qtd : produto.estoqueUn - qtd;
 
       await salvarProduto({
         ...produto,
@@ -211,7 +213,8 @@ function EstoquePageInterno() {
                 </h2>
                 <ul className="card divide-y divide-borda overflow-hidden">
                   {itens.map((p) => {
-                    const baixo = p.estoqueMinimo > 0 && p.estoqueUn <= p.estoqueMinimo;
+                    const negativo = p.estoqueUn < 0;
+                    const baixo = !negativo && p.estoqueMinimo > 0 && p.estoqueUn <= p.estoqueMinimo;
                     return (
                       <li key={p.id}>
                         <button
@@ -225,15 +228,19 @@ function EstoquePageInterno() {
                               <p className="text-xs text-texto-suave">{p.unPorCaixa} un/cx</p>
                             )}
                           </div>
-                          {baixo && (
+                          {(baixo || negativo) && (
                             <AlertTriangle
-                              className="h-4 w-4 shrink-0 text-acento"
-                              aria-label="Estoque baixo"
+                              className={`h-4 w-4 shrink-0 ${negativo ? "text-red-600 dark:text-red-400" : "text-acento"}`}
+                              aria-label={negativo ? "Estoque negativo" : "Estoque baixo"}
                             />
                           )}
                           <span
                             className={`shrink-0 text-right font-black tabular-nums ${
-                              baixo ? "text-acento" : ""
+                              negativo
+                                ? "text-red-600 dark:text-red-400"
+                                : baixo
+                                  ? "text-acento"
+                                  : ""
                             }`}
                           >
                             {p.estoqueUn} un
@@ -456,8 +463,20 @@ function ModalHistorico({
       <div className="space-y-4">
         <div className="card flex items-center justify-between px-4 py-3">
           <span className="text-sm font-semibold text-texto-suave">Estoque atual</span>
-          <span className="text-xl font-black tabular-nums">{produto.estoqueUn} un</span>
+          <span
+            className={`text-xl font-black tabular-nums ${
+              produto.estoqueUn < 0 ? "text-red-600 dark:text-red-400" : ""
+            }`}
+          >
+            {produto.estoqueUn} un
+          </span>
         </div>
+        {produto.estoqueUn < 0 && (
+          <p className="-mt-2 text-xs text-red-600 dark:text-red-400">
+            Negativo — venderam mais do que estava lançado. Faz um "Ajuste" pra
+            corrigir com a contagem real do galpão.
+          </p>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div>

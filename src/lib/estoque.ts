@@ -42,7 +42,10 @@ export async function aplicarAjusteEstoque(
     await salvarMovimento(movimento);
     await salvarProduto({
       ...produto,
-      estoqueUn: Math.max(0, produto.estoqueUn - delta),
+      // Sem clamp em 0: se vender mais do que tinha lançado, o negativo
+      // avisa que o estoque real está errado (faltou lançar uma compra,
+      // por exemplo) em vez de esconder o problema.
+      estoqueUn: produto.estoqueUn - delta,
       atualizadoEm: new Date().toISOString(),
     });
   }

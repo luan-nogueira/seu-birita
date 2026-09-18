@@ -166,6 +166,22 @@ function PedidoPageInterno() {
   const consignacao = pedido.tipo === "CONSIGNACAO";
   const remessas = totalRemessas(pedido.itens);
 
+  // Agrupa os itens por categoria (mesmo padrão do seletor de produtos e do
+  // estoque), preservando o índice original — é por ele que atualizarItem/
+  // removerItem acham o item certo dentro de pedido.itens.
+  const gruposPorCategoria = new Map<
+    string,
+    { item: PedidoItem; indice: number }[]
+  >();
+  pedido.itens.forEach((item, indice) => {
+    const categoria = produtoPorId(item.produtoId)?.categoria || "Sem categoria";
+    if (!gruposPorCategoria.has(categoria)) gruposPorCategoria.set(categoria, []);
+    gruposPorCategoria.get(categoria)!.push({ item, indice });
+  });
+  const categoriasItens = Array.from(gruposPorCategoria.entries()).sort(([a], [b]) =>
+    a.localeCompare(b, "pt-BR"),
+  );
+
   function atualizar(mudanca: Partial<Pedido>) {
     setPedido((p) => (p ? { ...p, ...mudanca } : p));
   }
@@ -309,23 +325,32 @@ function PedidoPageInterno() {
             </div>
           ) : (
             <>
-              {/* Celular: um cartão por produto */}
-              <ul className="space-y-2 md:hidden">
-                {pedido.itens.map((item, i) => (
-                  <CartaoItem
-                    key={`${item.produtoId}-${i}`}
-                    item={item}
-                    consignacao={consignacao}
-                    aoMudar={(m) => atualizarItem(i, m)}
-                    aoRemover={() => removerItem(i)}
-                  />
+              {/* Celular: um cartão por produto, agrupado por categoria */}
+              <div className="space-y-4 md:hidden">
+                {categoriasItens.map(([categoria, grupo]) => (
+                  <div key={categoria}>
+                    <p className="mb-1.5 text-[11px] font-bold tracking-wide text-texto-suave uppercase">
+                      {categoria}
+                    </p>
+                    <ul className="space-y-2">
+                      {grupo.map(({ item, indice }) => (
+                        <CartaoItem
+                          key={`${item.produtoId}-${indice}`}
+                          item={item}
+                          consignacao={consignacao}
+                          aoMudar={(m) => atualizarItem(indice, m)}
+                          aoRemover={() => removerItem(indice)}
+                        />
+                      ))}
+                    </ul>
+                  </div>
                 ))}
-              </ul>
+              </div>
 
-              {/* Desktop: a planilha, só que legível */}
+              {/* Desktop: a planilha, só que legível, agrupada por categoria */}
               <div className="hidden md:block">
                 <TabelaItens
-                  itens={pedido.itens}
+                  categorias={categoriasItens}
                   remessas={remessas}
                   consignacao={consignacao}
                   aoMudarItem={atualizarItem}
@@ -680,13 +705,13 @@ function LinhaQtd({
 /* ---------------------------- Tabela no desktop --------------------------- */
 
 function TabelaItens({
-  itens,
+  categorias,
   remessas,
   consignacao,
   aoMudarItem,
   aoRemoverItem,
 }: {
-  itens: PedidoItem[];
+  categorias: [string, { item: PedidoItem; indice: number }[]][];
   remessas: number;
   consignacao: boolean;
   aoMudarItem: (i: number, m: Partial<PedidoItem>) => void;
@@ -694,6 +719,7 @@ function TabelaItens({
 }) {
   const tipo = consignacao ? "CONSIGNACAO" : "VENDA_DIRETA";
   const colunasRemessa = Array.from({ length: remessas }, (_, i) => i);
+  const totalColunas = 6 + 3 * remessas + (consignacao ? 3 : 0);
 
   return (
     <div className="card overflow-x-auto">
@@ -750,8 +776,17 @@ function TabelaItens({
           </tr>
         </thead>
 
-        <tbody className="divide-y divide-borda">
-          {itens.map((item, indice) => {
+        {categorias.map(([categoria, grupo]) => (
+        <tbody key={categoria} className="divide-y divide-borda">
+          <tr className="bg-superficie-2/60">
+            <td
+              colSpan={totalColunas}
+              className="px-3 py-1.5 text-[10px] font-bold tracking-wide text-texto-suave uppercase"
+            >
+              {categoria}
+            </td>
+          </tr>
+          {grupo.map(({ item, indice }) => {
             const entregue = entregueUn(item);
             const devolvido = devolvidoUn(item, tipo);
             const saldo = saldoUn(item, tipo);
@@ -873,6 +908,7 @@ function TabelaItens({
             );
           })}
         </tbody>
+        ))}
       </table>
     </div>
   );
