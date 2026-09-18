@@ -2,6 +2,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Evita tela travada depois de um deploy: se o celular ainda tem uma aba
+  // aberta da versão anterior e o usuário clica em algo que precisa buscar
+  // uma página nova (ex: Relatório/Romaneio), o Next percebe que o arquivo
+  // da versão antiga não existe mais no servidor e recarrega a página
+  // sozinho, em vez de simplesmente não fazer nada.
+  deploymentId: process.env.VERCEL_GIT_COMMIT_SHA,
   images: {
     remotePatterns: [
       // Cloudinary: novo host das fotos de produto.
