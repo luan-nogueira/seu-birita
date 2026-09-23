@@ -74,15 +74,22 @@ function FinanceiroPageInterno() {
     [pedidos],
   );
 
-  const [mesFiltro, setMesFiltro] = useState(() => new Date().toISOString().slice(0, 7));
+  const [dataInicial, setDataInicial] = useState(() => hojeISO().slice(0, 8) + "01");
+  const [dataFinal, setDataFinal] = useState(hojeISO());
 
   const recebidoMes = pagamentos
-    .filter((p) => p.data.startsWith(mesFiltro))
+    .filter((p) => {
+      const d = p.data.slice(0, 10);
+      return d >= dataInicial && d <= dataFinal;
+    })
     .reduce((s, p) => s + p.valor, 0);
 
   const pedidosDoMes = useMemo(
-    () => ativos.filter((p) => p.dataEvento.startsWith(mesFiltro)),
-    [ativos, mesFiltro],
+    () => ativos.filter((p) => {
+      const d = p.dataEvento.slice(0, 10);
+      return d >= dataInicial && d <= dataFinal;
+    }),
+    [ativos, dataInicial, dataFinal],
   );
   const lucroRecebidoMes = lucroRecebidoTotal(pedidosDoMes);
   const lucroPrevistoMes = lucroTotal(pedidosDoMes);
@@ -271,18 +278,24 @@ function FinanceiroPageInterno() {
             <div className="flex items-center gap-1.5 text-texto-suave">
               <TrendingUp className="h-3.5 w-3.5" />
               <p className="text-[11px] font-semibold tracking-wide uppercase">
-                Recebido no mês
+                Recebido no período
               </p>
             </div>
             <p className="mt-1.5 text-2xl font-black tabular-nums">
               {brl(recebidoMes)}
             </p>
-            <div className="mt-0.5 text-xs text-texto-suave">
+            <div className="mt-1.5 flex gap-2">
               <input
-                type="month"
-                value={mesFiltro}
-                onChange={(e) => setMesFiltro(e.target.value)}
-                className="bg-transparent outline-none cursor-pointer w-full text-texto-suave"
+                type="date"
+                value={dataInicial}
+                onChange={(e) => setDataInicial(e.target.value)}
+                className="campo flex-1 text-[11px] px-1.5 py-1 h-auto min-h-0"
+              />
+              <input
+                type="date"
+                value={dataFinal}
+                onChange={(e) => setDataFinal(e.target.value)}
+                className="campo flex-1 text-[11px] px-1.5 py-1 h-auto min-h-0"
               />
             </div>
           </div>
@@ -300,7 +313,7 @@ function FinanceiroPageInterno() {
             <p className="mt-0.5 text-xs text-texto-suave">
               {lucroPrevistoMes > lucroRecebidoMes
                 ? `de ${brl(lucroPrevistoMes)} previsto`
-                : `${pedidosDoMes.length} evento(s) no mês`}
+                : `${pedidosDoMes.length} evento(s) no período`}
             </p>
           </div>
         </div>

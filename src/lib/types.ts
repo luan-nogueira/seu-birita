@@ -116,6 +116,12 @@ export interface Pedido {
   desconto: number;
   obs?: string;
   itens: PedidoItem[];
+  /**
+   * Pedido de onde este puxou as devoluções ao ser criado. Fica no pedido
+   * novo (e não uma marca no antigo) pra que excluir o novo libere as
+   * sobras de novo, sem precisar regravar o pedido antigo.
+   */
+  sobrasDePedidoId?: string;
   /** Totais desnormalizados pra listagem não ter que recalcular tudo. */
   valorPedido: number;
   valorFinal: number;

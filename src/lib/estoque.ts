@@ -90,3 +90,30 @@ export async function reverterEstoquePedido(
     await removerMovimento(m.id);
   }
 }
+
+/**
+ * Quanto um pedido já tirou de verdade do estoque, somando os lançamentos
+ * dele no histórico. Serve de baseline no lugar de efeitoEstoque(pedido)
+ * porque a regra muda com o tempo (ex.: rascunho passou a não tirar do
+ * estoque) — um pedido antigo que já descontou pela regra velha não pode
+ * descontar de novo nem "esquecer" de devolver ao ser excluído.
+ * Retorna null se o pedido não tem nenhum lançamento (pedido anterior ao
+ * controle de estoque), pra quem chama cair no cálculo pela regra.
+ */
+export function efeitoLancado(
+  movimentos: EstoqueMovimento[],
+  pedidoId: string,
+): Map<string, number> | null {
+  const doPedido = movimentos.filter(
+    (m) =>
+      m.referenciaId === pedidoId &&
+      (m.origem === "PEDIDO" || m.origem === "DEVOLUCAO"),
+  );
+  if (doPedido.length === 0) return null;
+  const mapa = new Map<string, number>();
+  for (const m of doPedido) {
+    const sinal = m.tipo === "SAIDA" ? 1 : -1;
+    mapa.set(m.produtoId, (mapa.get(m.produtoId) ?? 0) + sinal * m.quantidadeUn);
+  }
+  return mapa;
+}

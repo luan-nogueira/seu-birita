@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import type { PedidoStatus, PedidoTipo } from "@/lib/types";
 
@@ -60,6 +61,8 @@ export function Vazio({
 /**
  * No celular sobe de baixo como uma folha; no desktop centraliza.
  * É o mesmo componente pros dois — só muda o posicionamento.
+ * Renderiza em um React Portal para fugir de contextos de empilhamento (z-index)
+ * de barras de navegação com position: sticky.
  */
 export function Modal({
   aberto,
@@ -76,6 +79,12 @@ export function Modal({
   rodape?: ReactNode;
   largura?: string;
 }) {
+  const [montado, setMontado] = useState(false);
+
+  useEffect(() => {
+    setMontado(true);
+  }, []);
+
   useEffect(() => {
     if (!aberto) return;
     const aoTeclar = (e: KeyboardEvent) => {
@@ -91,10 +100,10 @@ export function Modal({
     };
   }, [aberto, aoFechar]);
 
-  if (!aberto) return null;
+  if (!aberto || !montado) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-end justify-center md:items-center">
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
         onClick={aoFechar}
@@ -128,7 +137,8 @@ export function Modal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

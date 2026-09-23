@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Printer } from "lucide-react";
@@ -7,6 +9,7 @@ import { Logo } from "@/components/Logo";
 import { useDados } from "@/lib/store";
 import {
   calcularTotais,
+  compararCategorias,
   devolvidoUn,
   entregueUn,
   saldoUn,
@@ -21,6 +24,13 @@ export default function RelatorioPage() {
   const { pedidoPorId, clientePorId, produtoPorId, carregando } = useDados();
 
   const pedido = pedidoPorId(id);
+
+  // Antes dos returns abaixo: hook não pode ficar depois de um return
+  // condicional, senão o React quebra quando o carregamento termina.
+  useEffect(() => {
+    if (!pedido) return;
+    document.title = `Pedido #${String(pedido.numero).padStart(3, "0")} - ${pedido.clienteNome}${pedido.titulo ? ` - ${pedido.titulo}` : ""}`;
+  }, [pedido]);
 
   if (carregando) {
     return <p className="p-8 text-sm">Carregando…</p>;
@@ -52,9 +62,9 @@ export default function RelatorioPage() {
     gruposPorCategoria.get(categoria)!.push(item);
   });
   const categoriasItens = Array.from(gruposPorCategoria.entries()).sort(([a], [b]) =>
-    a.localeCompare(b, "pt-BR"),
+    compararCategorias(a, b),
   );
-  const totalColunas = 5 + (consignacao ? 1 : 0);
+  const totalColunas = 7 + (consignacao ? 3 : 0);
 
   return (
     <div className="min-h-dvh bg-neutral-200 print:bg-white">
@@ -157,16 +167,28 @@ export default function RelatorioPage() {
         <table className="mt-5 w-full border-collapse text-[11px]">
           <thead>
             <tr className="bg-[#3b1b0e] text-[#f3dca6]">
-              <th className="px-2 py-2 text-left font-bold">Produto</th>
-              <th className="px-2 py-2 text-right font-bold">Entregue</th>
+              <th className="px-2 py-2 text-left font-bold" rowSpan={2}>Produto</th>
+              <th className="px-1 py-1 text-center font-bold border-b border-[#f3dca6]/20" colSpan={3}>Entregue</th>
               {consignacao && (
-                <th className="px-2 py-2 text-right font-bold">Devolvido</th>
+                <th className="px-1 py-1 text-center font-bold border-b border-[#f3dca6]/20" colSpan={3}>Devolvido</th>
               )}
-              <th className="px-2 py-2 text-right font-bold">
+              <th className="px-2 py-2 text-right font-bold" rowSpan={2}>
                 {consignacao ? "Consumo" : "Qtd"}
               </th>
-              <th className="px-2 py-2 text-right font-bold">Valor un</th>
-              <th className="px-2 py-2 text-right font-bold">Total</th>
+              <th className="px-2 py-2 text-right font-bold" rowSpan={2}>Valor un</th>
+              <th className="px-2 py-2 text-right font-bold" rowSpan={2}>Total</th>
+            </tr>
+            <tr className="bg-[#3b1b0e] text-[#f3dca6]">
+              <th className="px-1 py-1 text-right font-bold text-[9px] uppercase">Cx</th>
+              <th className="px-1 py-1 text-right font-bold text-[9px] uppercase">Un</th>
+              <th className="px-1 py-1 text-right font-bold text-[9px] uppercase">Total</th>
+              {consignacao && (
+                <>
+                  <th className="px-1 py-1 text-right font-bold text-[9px] uppercase">Cx</th>
+                  <th className="px-1 py-1 text-right font-bold text-[9px] uppercase">Un</th>
+                  <th className="px-1 py-1 text-right font-bold text-[9px] uppercase">Total</th>
+                </>
+              )}
             </tr>
           </thead>
 
@@ -185,6 +207,12 @@ export default function RelatorioPage() {
                 const devolvido = devolvidoUn(item, pedido.tipo);
                 const saldo = saldoUn(item, pedido.tipo);
 
+                const entrCx = Math.floor(entregue / item.unPorCaixa);
+                const entrUn = entregue % item.unPorCaixa;
+                
+                const devCx = Math.floor(devolvido / item.unPorCaixa);
+                const devUn = devolvido % item.unPorCaixa;
+
                 return (
                   <tr
                     key={`${item.produtoId}-${i}`}
@@ -198,13 +226,28 @@ export default function RelatorioPage() {
                         </span>
                       )}
                     </td>
-                    <td className="border-b border-neutral-200 px-2 py-1.5 text-right tabular-nums">
+                    <td className="border-b border-neutral-200 px-1 py-1.5 text-right tabular-nums text-neutral-500">
+                      {item.unPorCaixa > 1 && entrCx > 0 ? num(entrCx) : "—"}
+                    </td>
+                    <td className="border-b border-neutral-200 px-1 py-1.5 text-right tabular-nums text-neutral-500">
+                      {item.unPorCaixa > 1 && entrUn > 0 ? num(entrUn) : "—"}
+                    </td>
+                    <td className="border-b border-neutral-200 px-1 py-1.5 text-right font-semibold tabular-nums">
                       {num(entregue)}
                     </td>
+
                     {consignacao && (
-                      <td className="border-b border-neutral-200 px-2 py-1.5 text-right tabular-nums text-neutral-600">
-                        {devolvido ? num(devolvido) : "—"}
-                      </td>
+                      <>
+                        <td className="border-b border-neutral-200 px-1 py-1.5 text-right tabular-nums text-neutral-400">
+                          {item.unPorCaixa > 1 && devCx > 0 ? num(devCx) : "—"}
+                        </td>
+                        <td className="border-b border-neutral-200 px-1 py-1.5 text-right tabular-nums text-neutral-400">
+                          {item.unPorCaixa > 1 && devUn > 0 ? num(devUn) : "—"}
+                        </td>
+                        <td className="border-b border-neutral-200 px-1 py-1.5 text-right tabular-nums text-neutral-600">
+                          {devolvido > 0 ? num(devolvido) : "—"}
+                        </td>
+                      </>
                     )}
                     <td className="border-b border-neutral-200 px-2 py-1.5 text-right font-bold tabular-nums">
                       {num(saldo)}
@@ -224,13 +267,17 @@ export default function RelatorioPage() {
           <tfoot>
             <tr className="border-t-2 border-[#3b1b0e] font-bold">
               <td className="px-2 py-2">Totais</td>
-              <td className="px-2 py-2 text-right tabular-nums">
+              <td colSpan={2} />
+              <td className="px-1 py-2 text-right tabular-nums">
                 {num(totais.unidadesEntregues)}
               </td>
               {consignacao && (
-                <td className="px-2 py-2 text-right tabular-nums">
-                  {num(totais.unidadesDevolvidas)}
-                </td>
+                <>
+                  <td colSpan={2} />
+                  <td className="px-1 py-2 text-right tabular-nums">
+                    {num(totais.unidadesDevolvidas)}
+                  </td>
+                </>
               )}
               <td className="px-2 py-2 text-right tabular-nums">
                 {num(totais.unidadesConsumidas)}

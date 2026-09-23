@@ -1,4 +1,5 @@
 import type { Pedido, PedidoItem, PedidoTipo, Produto } from "./types";
+import { normalizar } from "./format";
 
 /**
  * Preço do produto na tabela escolhida — null se o produto não tiver a
@@ -152,7 +153,7 @@ export function lucroRecebidoTotal(pedidos: Pedido[]): number {
  */
 export function efeitoEstoque(pedido: Pedido): Map<string, number> {
   const mapa = new Map<string, number>();
-  if (pedido.status === "CANCELADO") return mapa;
+  if (pedido.status === "CANCELADO" || pedido.status === "RASCUNHO") return mapa;
   for (const item of pedido.itens) {
     mapa.set(item.produtoId, saldoUn(item, pedido.tipo));
   }
@@ -182,4 +183,23 @@ export function novoItem(produto: {
 /** Quantas remessas o pedido tem (a maior contagem entre os itens). */
 export function totalRemessas(itens: PedidoItem[]): number {
   return itens.reduce((max, i) => Math.max(max, i.entregas.length), 1);
+}
+
+
+const ORDEM_FIM = ["gelo", "descartaveis", "estrutura", "comodato", "estrutura e comodato"];
+
+export function compararCategorias(a: string, b: string): number {
+  const normA = normalizar(a || "Sem categoria");
+  const normB = normalizar(b || "Sem categoria");
+  const indexA = ORDEM_FIM.indexOf(normA);
+  const indexB = ORDEM_FIM.indexOf(normB);
+
+  const isAFim = indexA !== -1;
+  const isBFim = indexB !== -1;
+
+  if (isAFim && !isBFim) return 1;
+  if (!isAFim && isBFim) return -1;
+  if (isAFim && isBFim) return indexA - indexB;
+
+  return (a || "Sem categoria").localeCompare(b || "Sem categoria", "pt-BR");
 }

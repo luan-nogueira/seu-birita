@@ -1,11 +1,14 @@
 "use client";
 
+import { useEffect } from "react";
+
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Printer } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { useDados } from "@/lib/store";
 import { dataBR, telefoneBR } from "@/lib/format";
+import { compararCategorias } from "@/lib/calc";
 import { EMPRESA } from "@/lib/empresa";
 import type { PedidoItem } from "@/lib/types";
 
@@ -21,6 +24,13 @@ export default function RomaneioPage() {
   const { pedidoPorId, clientePorId, produtoPorId, carregando } = useDados();
 
   const pedido = pedidoPorId(id);
+
+  // Antes dos returns abaixo: hook não pode ficar depois de um return
+  // condicional, senão o React quebra quando o carregamento termina.
+  useEffect(() => {
+    if (!pedido) return;
+    document.title = `Romaneio #${String(pedido.numero).padStart(3, "0")} - ${pedido.clienteNome}${pedido.titulo ? ` - ${pedido.titulo}` : ""}`;
+  }, [pedido]);
 
   if (carregando) {
     return <p className="p-8 text-sm">Carregando…</p>;
@@ -39,6 +49,7 @@ export default function RomaneioPage() {
   }
 
   const cliente = clientePorId(pedido.clienteId);
+
 
   // Só o que tem alguma quantidade a carregar — sem preço, sem totais financeiros.
   // Soma cx e un exatamente como foram lançados na entrega, sem reconverter
@@ -59,7 +70,7 @@ export default function RomaneioPage() {
     porCategoria.get(l.categoria)!.push(l);
   }
   const categorias = Array.from(porCategoria.entries()).sort(([a], [b]) =>
-    a.localeCompare(b, "pt-BR"),
+    compararCategorias(a, b),
   );
   for (const [, lista] of categorias) {
     lista.sort((a, b) => a.item.nome.localeCompare(b.item.nome, "pt-BR"));

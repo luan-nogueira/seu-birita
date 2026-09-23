@@ -18,7 +18,8 @@ import { Protegido } from "@/components/Protegido";
 import { useDados, novoId } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { firebaseConfigurado } from "@/lib/firebase";
-import { brl, normalizar, paraCampo, paraNumero } from "@/lib/format";
+import { brl, dataBR, normalizar, paraCampo, paraNumero } from "@/lib/format";
+import { compararCategorias } from "@/lib/calc";
 import { CATEGORIAS_PADRAO, semearProdutos } from "@/lib/db/seed";
 import type { Produto } from "@/lib/types";
 
@@ -61,7 +62,7 @@ export default function ProdutosPage() {
 }
 
 function ProdutosPageInterno() {
-  const { produtos, salvarProduto, removerProduto, carregando } = useDados();
+  const { produtos, salvarProduto, removerProduto, carregando, movimentos } = useDados();
   const { permissoes } = useAuth();
 
   const [busca, setBusca] = useState("");
@@ -69,10 +70,21 @@ function ProdutosPageInterno() {
   const [form, setForm] = useState<Formulario>(FORM_VAZIO);
   const [modalAberto, setModalAberto] = useState(false);
   const [importAberto, setImportAberto] = useState(false);
+  const [categoriasAberto, setCategoriasAberto] = useState(false);
   const [fazendoUpload, setFazendoUpload] = useState(false);
   const [excluindoProduto, setExcluindoProduto] = useState<Produto | null>(null);
   const [recuperando, setRecuperando] = useState(false);
   const [salvandoProduto, setSalvandoProduto] = useState(false);
+
+  const ultimaCompra = useMemo(() => {
+    if (!editando?.id) return null;
+    const compras = movimentos
+      .filter(
+        (m) => m.produtoId === editando.id && m.origem === "COMPRA" && m.custoUn !== undefined,
+      )
+      .sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
+    return compras[0] || null;
+  }, [editando?.id, movimentos]);
 
   async function recuperarIniciais() {
     if (!confirm("Isso vai adicionar as 35 bebidas da versão de demonstração. Continuar?")) return;
@@ -135,7 +147,7 @@ function ProdutosPageInterno() {
 
   const categorias = useMemo(() => {
     const doBanco = produtos.map((p) => p.categoria).filter(Boolean);
-    return Array.from(new Set([...CATEGORIAS_PADRAO, ...doBanco]));
+    return Array.from(new Set(doBanco));
   }, [produtos]);
 
   const filtrados = useMemo(() => {
@@ -156,7 +168,7 @@ function ProdutosPageInterno() {
       mapa.get(chave)!.push(p);
     }
     return Array.from(mapa.entries()).sort(([a], [b]) =>
-      a.localeCompare(b, "pt-BR"),
+      compararCategorias(a, b),
     );
   }, [filtrados]);
 
@@ -258,6 +270,13 @@ function ProdutosPageInterno() {
             >
               <Download className="h-4 w-4" />
               <span className="hidden sm:inline">Importar</span>
+            </button>
+            <button
+              className="btn-secundario"
+              onClick={() => setCategoriasAberto(true)}
+            >
+              <Boxes className="h-4 w-4" />
+              <span className="hidden sm:inline">Categorias</span>
             </button>
             <button className="btn-primario" onClick={abrirNovo}>
               <Plus className="h-4 w-4" />
@@ -573,18 +592,25 @@ function ProdutosPageInterno() {
             {permissoes.verCusto && (
               <div>
                 <label className="rotulo" htmlFor="custo">
-                  Custo por unidade
+                  Custo médio por unidade
                 </label>
                 <input
                   id="custo"
-                  className="campo"
+                  className="campo bg-superficie-2 text-texto-suave"
                   inputMode="decimal"
-                  placeholder="opcional"
+                  placeholder="0,00"
                   value={form.precoCusto}
-                  onChange={(e) =>
-                    setForm({ ...form, precoCusto: e.target.value })
-                  }
+                  disabled={!!editando}
+                  onChange={(e) => setForm({ ...form, precoCusto: e.target.value })}
                 />
+                <p className="mt-1 text-xs text-texto-suave">
+                  Calculado pela média ponderada das compras lançadas no estoque.
+                  {ultimaCompra && (
+                    <span className="block mt-1">
+                      Última compra: <strong>{brl(ultimaCompra.custoUn ?? 0)}</strong> em {dataBR(ultimaCompra.data)}.
+                    </span>
+                  )}
+                </p>
               </div>
             )}
             <div>
@@ -669,6 +695,11 @@ function ProdutosPageInterno() {
           {excluindoProduto && `Tem certeza que deseja excluir "${excluindoProduto.nome}"? Pedidos antigos não serão afetados.`}
         </p>
       </Modal>
+
+      <ModalCategorias
+        aberto={categoriasAberto}
+        aoFechar={() => setCategoriasAberto(false)}
+      />
     </>
   );
 }
@@ -926,3 +957,96 @@ export function interpretarLista(texto: string): LinhaImportada[] {
 
   return saida;
 }
+
+function ModalCategorias({
+  aberto,
+  aoFechar,
+}: {
+  aberto: boolean;
+  aoFechar: () => void;
+}) {
+  const { produtos, salvarProduto } = useDados();
+  const [salvando, setSalvando] = useState(false);
+
+  const categorias = useMemo(() => {
+    const doBanco = produtos.map((p) => p.categoria).filter(Boolean);
+    return Array.from(new Set(doBanco)).sort((a, b) => compararCategorias(a, b));
+  }, [produtos]);
+
+  async function renomear(velha: string) {
+    const nova = prompt(`Renomear a categoria "${velha}" para:`, velha);
+    if (!nova || nova.trim() === velha) return;
+
+    setSalvando(true);
+    const afetados = produtos.filter((p) => p.categoria === velha);
+    for (const p of afetados) {
+      await salvarProduto({ ...p, categoria: nova.trim() });
+    }
+    setSalvando(false);
+  }
+
+  async function excluir(categoriaParaExcluir: string) {
+    if (!window.confirm(`Excluir a categoria "${categoriaParaExcluir}" de todos os produtos?`)) return;
+    setSalvando(true);
+    try {
+      const produtosAfetados = produtos.filter(p => p.categoria === categoriaParaExcluir);
+      for (const p of produtosAfetados) {
+        await salvarProduto({
+          ...p,
+          categoria: "",
+        });
+      }
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <Modal aberto={aberto} aoFechar={aoFechar} titulo="Gerenciar Categorias">
+      <div className="space-y-4">
+        {salvando && (
+          <p className="text-sm text-acento animate-pulse font-bold">
+            Atualizando produtos...
+          </p>
+        )}
+        <ul className="card divide-y divide-borda">
+          {categorias.map((c) => {
+            const qtd = produtos.filter((p) => p.categoria === c).length;
+            return (
+              <li key={c} className="flex items-center justify-between px-4 py-3">
+                <div>
+                  <span className="font-semibold">{c}</span>
+                  <span className="ml-2 text-xs text-texto-suave">
+                    ({qtd} {qtd === 1 ? "produto" : "produtos"})
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    className="grid h-8 w-8 place-items-center rounded-lg text-texto-suave transition hover:bg-superficie-2 hover:text-texto"
+                    onClick={() => renomear(c)}
+                    disabled={salvando}
+                    title="Renomear"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    className="grid h-8 w-8 place-items-center rounded-lg text-texto-suave transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                    onClick={() => excluir(c)}
+                    disabled={salvando}
+                    title="Excluir"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="text-xs text-texto-suave text-center">
+          Você pode criar novas categorias ao digitar um nome novo direto no cadastro de um produto.
+        </p>
+      </div>
+    </Modal>
+  );
+}
+

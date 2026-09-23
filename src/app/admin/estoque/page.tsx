@@ -5,7 +5,8 @@ import { Cabecalho, Modal } from "@/components/ui";
 import { Protegido } from "@/components/Protegido";
 import { useDados } from "@/lib/store";
 import { novoId } from "@/lib/db";
-import { brl, dataBR, hojeISO, normalizar } from "@/lib/format";
+import { brl, dataBR, dataHoraBR, hojeISO, normalizar } from "@/lib/format";
+import { compararCategorias } from "@/lib/calc";
 import {
   AlertTriangle,
   ArrowDown,
@@ -116,7 +117,7 @@ function EstoquePageInterno() {
       if (!mapa.has(chave)) mapa.set(chave, []);
       mapa.get(chave)!.push(p);
     }
-    return Array.from(mapa.entries()).sort(([a], [b]) => a.localeCompare(b, "pt-BR"));
+    return Array.from(mapa.entries()).sort(([a], [b]) => compararCategorias(a, b));
   }, [visiveis]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -291,17 +292,20 @@ function EstoquePageInterno() {
                               aria-label={negativo ? "Estoque negativo" : "Estoque baixo"}
                             />
                           )}
-                          <span
-                            className={`shrink-0 text-right font-black tabular-nums ${
+                          <div className={`shrink-0 text-right font-black tabular-nums ${
                               negativo
                                 ? "text-red-600 dark:text-red-400"
                                 : baixo
                                   ? "text-acento"
                                   : ""
-                            }`}
-                          >
-                            {p.estoqueUn} un
-                          </span>
+                            }`}>
+                            <span className="block">{p.estoqueUn} un</span>
+                            {p.unPorCaixa > 1 && (
+                              <span className="block text-[10px] text-texto-suave/80 font-bold uppercase mt-0.5">
+                                {Math.floor(p.estoqueUn / p.unPorCaixa)} cx {p.estoqueUn % p.unPorCaixa > 0 && `+ ${p.estoqueUn % p.unPorCaixa} un`}
+                              </span>
+                            )}
+                          </div>
                           <ChevronRight className="h-4 w-4 shrink-0 text-texto-suave" />
                         </button>
                       </li>
@@ -498,6 +502,7 @@ function ModalHistorico({
   movimentos: EstoqueMovimento[];
   aoFechar: () => void;
 }) {
+  const { pedidoPorId, fornecedores } = useDados();
   const [de, setDe] = useState(inicioDoMes());
   const [ate, setAte] = useState(hojeISO());
 
@@ -518,15 +523,27 @@ function ModalHistorico({
   return (
     <Modal aberto aoFechar={aoFechar} titulo={produto.nome} largura="max-w-xl">
       <div className="space-y-4">
+        {produto.unPorCaixa > 1 && (
+          <p className="-mt-2 text-sm text-texto-suave">
+            Quantidade por caixa: <strong className="text-texto">{produto.unPorCaixa} un</strong>
+          </p>
+        )}
         <div className="card flex items-center justify-between px-4 py-3">
           <span className="text-sm font-semibold text-texto-suave">Estoque atual</span>
-          <span
-            className={`text-xl font-black tabular-nums ${
-              produto.estoqueUn < 0 ? "text-red-600 dark:text-red-400" : ""
-            }`}
-          >
-            {produto.estoqueUn} un
-          </span>
+          <div className="text-right">
+            <span
+              className={`block text-xl font-black tabular-nums ${
+                produto.estoqueUn < 0 ? "text-red-600 dark:text-red-400" : ""
+              }`}
+            >
+              {produto.estoqueUn} un
+            </span>
+            {produto.unPorCaixa > 1 && (
+              <span className="block text-[11px] font-semibold text-texto-suave uppercase">
+                {Math.floor(produto.estoqueUn / produto.unPorCaixa)} cx {produto.estoqueUn % produto.unPorCaixa > 0 && `+ ${produto.estoqueUn % produto.unPorCaixa} un`}
+              </span>
+            )}
+          </div>
         </div>
         {produto.estoqueUn < 0 && (
           <p className="-mt-2 text-xs text-red-600 dark:text-red-400">
@@ -591,6 +608,25 @@ function ModalHistorico({
           <ul className="card divide-y divide-borda overflow-hidden">
             {noPeriodo.map((m) => {
               const isEntrada = m.tipo === "ENTRADA";
+              let detalhesStr = "";
+              if ((m.origem === "PEDIDO" || m.origem === "DEVOLUCAO") && m.referenciaId) {
+                const p = pedidoPorId(m.referenciaId);
+                if (p) {
+                  detalhesStr = p.clienteNome;
+                  if (p.titulo) detalhesStr += ` (${p.titulo})`;
+                }
+              } else if (m.origem === "COMPRA") {
+                const f = m.fornecedorId
+                  ? fornecedores.find((x) => x.id === m.fornecedorId)
+                  : undefined;
+                if (f) {
+                  detalhesStr = f.nome;
+                }
+                if (m.custoUn) {
+                  detalhesStr += (detalhesStr ? " · " : "") + brl(m.custoUn) + "/un";
+                }
+              }
+
               return (
                 <li key={m.id} className="flex items-center gap-3 px-4 py-2.5">
                   {isEntrada ? (
@@ -599,7 +635,10 @@ function ModalHistorico({
                     <ArrowUp className="h-4 w-4 shrink-0 text-red-500" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold">{ROTULO_ORIGEM[m.origem]}</p>
+                    <p className="text-sm font-semibold">
+                      {ROTULO_ORIGEM[m.origem]}
+                      {detalhesStr && <span className="ml-1 text-xs text-texto-suave font-normal">({detalhesStr})</span>}
+                    </p>
                     <p className="text-xs text-texto-suave">
                       {dataBR(m.data)}
                       {m.obs && ` · ${m.obs}`}

@@ -21,9 +21,10 @@ import { CampoQtd } from "@/components/CampoQtd";
 import { Protegido } from "@/components/Protegido";
 import { useAuth } from "@/lib/auth";
 import { useDados, novoId } from "@/lib/store";
-import { aplicarAjusteEstoque, reverterEstoquePedido } from "@/lib/estoque";
+import { aplicarAjusteEstoque, efeitoLancado, reverterEstoquePedido } from "@/lib/estoque";
 import {
   calcularTotais,
+  compararCategorias,
   devolvidoUn,
   efeitoEstoque,
   entregueUn,
@@ -51,11 +52,9 @@ import type {
   PedidoStatus,
 } from "@/lib/types";
 
-// Rascunho e Em acerto acontecem sozinhos (rascunho ao criar, em acerto
-// quando tem pagamento parcial) — não precisam de botão pra clicar.
-const STATUS_DISPONIVEIS: PedidoStatus[] = ["ENTREGUE", "FINALIZADO", "CANCELADO"];
+const STATUS_DISPONIVEIS: PedidoStatus[] = ["RASCUNHO", "ENTREGUE", "FINALIZADO", "CANCELADO"];
 
-const STATUS_AUTOMATICO: PedidoStatus[] = ["RASCUNHO", "ACERTO"];
+const STATUS_AUTOMATICO: PedidoStatus[] = ["ACERTO"];
 
 const ROTULO_STATUS: Record<PedidoStatus, string> = {
   RASCUNHO: "Rascunho",
@@ -99,6 +98,7 @@ function PedidoPageInterno() {
   const [pedido, setPedido] = useState<Pedido | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [modalExcluirAberto, setModalExcluirAberto] = useState(false);
+  const [excluindoItem, setExcluindoItem] = useState<{ indice: number; nome: string } | null>(null);
   const semeado = useRef(false);
 
   // Última "foto" do que este pedido já tirou do estoque — a baseline pra
@@ -106,12 +106,15 @@ function PedidoPageInterno() {
   const ultimoEstoqueAplicado = useRef<Map<string, number> | null>(null);
 
   useEffect(() => {
-    if (!semeado.current && remoto) {
+    // Espera tudo carregar: a baseline de estoque vem dos movimentos.
+    if (!semeado.current && remoto && !carregando) {
       setPedido(remoto);
-      ultimoEstoqueAplicado.current = efeitoEstoque(remoto);
+      ultimoEstoqueAplicado.current =
+        efeitoLancado(movimentos, remoto.id) ?? efeitoEstoque(remoto);
       semeado.current = true;
     }
-  }, [remoto]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remoto, carregando]);
 
   const deps = { produtoPorId, salvarProduto, salvarMovimento };
 
@@ -181,7 +184,7 @@ function PedidoPageInterno() {
     gruposPorCategoria.get(categoria)!.push({ item, indice });
   });
   const categoriasItens = Array.from(gruposPorCategoria.entries()).sort(([a], [b]) =>
-    a.localeCompare(b, "pt-BR"),
+    compararCategorias(a, b),
   );
 
   function atualizar(mudanca: Partial<Pedido>) {
@@ -201,6 +204,17 @@ function PedidoPageInterno() {
     setPedido((p) =>
       p ? { ...p, itens: p.itens.filter((_, i) => i !== indice) } : p,
     );
+  }
+
+  function pedirRemocaoItem(indice: number) {
+    if (!pedido) return;
+    setExcluindoItem({ indice, nome: pedido.itens[indice].nome });
+  }
+
+  function confirmarRemocaoItem() {
+    if (!excluindoItem) return;
+    removerItem(excluindoItem.indice);
+    setExcluindoItem(null);
   }
 
   function adicionarRemessa() {
@@ -342,7 +356,7 @@ function PedidoPageInterno() {
                           item={item}
                           consignacao={consignacao}
                           aoMudar={(m) => atualizarItem(indice, m)}
-                          aoRemover={() => removerItem(indice)}
+                          aoRemover={() => pedirRemocaoItem(indice)}
                         />
                       ))}
                     </ul>
@@ -357,7 +371,7 @@ function PedidoPageInterno() {
                   remessas={remessas}
                   consignacao={consignacao}
                   aoMudarItem={atualizarItem}
-                  aoRemoverItem={removerItem}
+                  aoRemoverItem={pedirRemocaoItem}
                 />
               </div>
             </>
@@ -405,6 +419,29 @@ function PedidoPageInterno() {
           não pode ser desfeita.
         </p>
       </Modal>
+
+      <Modal
+        aberto={!!excluindoItem}
+        aoFechar={() => setExcluindoItem(null)}
+        titulo="Remover item"
+        rodape={
+          <>
+            <button
+              className="btn-secundario"
+              onClick={() => setExcluindoItem(null)}
+            >
+              Cancelar
+            </button>
+            <button className="btn-perigo" onClick={confirmarRemocaoItem}>
+              Remover item
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-texto-suave">
+          Tem certeza que deseja remover o produto <strong>{excluindoItem?.nome}</strong> do pedido?
+        </p>
+      </Modal>
     </>
   );
 }
@@ -446,7 +483,11 @@ function BarraStatus({
         </span>
       )}
       <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 md:mx-0 md:px-0">
-        {STATUS_DISPONIVEIS.map((s) => (
+        {STATUS_DISPONIVEIS.filter(
+          // Voltar pra rascunho só antes de receber algum pagamento — senão o
+          // pedido some do financeiro com dinheiro já recebido.
+          (s) => s !== "RASCUNHO" || pedido.status === "RASCUNHO" || !(pedido.valorPago > 0),
+        ).map((s) => (
           <button
             key={s}
             onClick={() => aoMudarStatus(s)}
@@ -584,10 +625,10 @@ function CartaoItem({
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <p className="font-bold leading-tight">{item.nome}</p>
-          <p className="mt-0.5 text-xs text-texto-suave">
-            {brl(item.precoUn)}/un
-            {item.unPorCaixa > 1 && ` · ${item.unPorCaixa} un/cx`}
-          </p>
+          <div className="mt-0.5 flex flex-wrap items-center gap-2">
+            <CampoPrecoInline valor={item.precoUn} aoMudar={(v) => aoMudar({ precoUn: v })} />
+            <span className="text-xs text-texto-suave">/un {item.unPorCaixa > 1 && ` · ${item.unPorCaixa} un/cx`}</span>
+          </div>
         </div>
         <button
           onClick={aoRemover}
@@ -701,6 +742,37 @@ function LinhaQtd({
       <span className="w-14 shrink-0 text-right text-sm font-bold tabular-nums">
         {num(total)}
       </span>
+    </div>
+  );
+}
+
+function CampoPrecoInline({
+  valor,
+  aoMudar,
+}: {
+  valor: number;
+  aoMudar: (v: number) => void;
+}) {
+  const [texto, setTexto] = useState(paraCampo(valor));
+
+  useEffect(() => {
+    setTexto(paraCampo(valor));
+  }, [valor]);
+
+  return (
+    <div className="flex w-24 items-center gap-1 rounded border border-borda bg-superficie-2 px-1.5 py-0.5 transition focus-within:border-acento">
+      <span className="text-[10px] text-texto-suave">R$</span>
+      <input
+        className="min-w-0 flex-1 bg-transparent text-right text-sm font-bold tabular-nums outline-none"
+        inputMode="decimal"
+        value={texto}
+        onChange={(e) => setTexto(e.target.value)}
+        onBlur={() => {
+          const v = paraNumero(texto);
+          setTexto(paraCampo(v));
+          if (v !== valor) aoMudar(v);
+        }}
+      />
     </div>
   );
 }
@@ -889,8 +961,10 @@ function TabelaItens({
                 <td className="border-l border-borda px-3 py-2 text-right font-bold tabular-nums">
                   {num(saldo)}
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {brl(item.precoUn)}
+                <td className="px-3 py-2 text-right">
+                  <div className="flex justify-end">
+                    <CampoPrecoInline valor={item.precoUn} aoMudar={(v) => aoMudarItem(indice, { precoUn: v })} />
+                  </div>
                 </td>
                 <td className="px-3 py-2 text-right text-texto-suave tabular-nums">
                   {brlOuTraco(valorPedidoItem(item))}
@@ -957,7 +1031,7 @@ function SeletorProdutos({
       mapa.get(chave)!.push(p);
     }
     return Array.from(mapa.entries()).sort(([a], [b]) =>
-      a.localeCompare(b, "pt-BR"),
+      compararCategorias(a, b),
     );
   }, [disponiveis]);
 
