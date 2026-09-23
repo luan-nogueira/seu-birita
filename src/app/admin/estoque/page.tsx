@@ -599,7 +599,7 @@ function ModalHistorico({
           const f = m.fornecedorId
             ? fornecedores.find((x) => x.id === m.fornecedorId)
             : undefined;
-          if (f) detalhe = f.nome;
+          detalhe = f ? f.nome : "sem fornecedor";
           if (m.custoUn) detalhe += (detalhe ? " · " : "") + brl(m.custoUn) + "/un";
         }
         resultado.push({

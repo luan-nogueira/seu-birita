@@ -132,6 +132,16 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
 
+  /* No iPhone o campo de data tem largura mínima própria e ignora
+     w-full/min-w-0 — em grade de 2 colunas ele estourava pra fora da tela
+     (o "Até" aparecia cortado). Sem a aparência nativa ele obedece. */
+  input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-width: 0;
+    max-width: 100%;
+  }
+
   input,
   select,
   textarea,
