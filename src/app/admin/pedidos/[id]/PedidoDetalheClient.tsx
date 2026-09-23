@@ -481,28 +481,56 @@ function BarraStatus({
   pedido: Pedido;
   aoMudarStatus: (s: PedidoStatus) => void;
 }) {
+  const [aviso, setAviso] = useState("");
+  const saldoAberto = calcularTotais(pedido).saldoAberto;
+
+  function escolher(s: PedidoStatus) {
+    // Finalizado é "conta fechada" — com valor em aberto o certo é
+    // Aguardando acerto, senão o pedido parece quitado sem estar. Quando o
+    // pagamento fecha o total, o pedido já vira Finalizado sozinho.
+    if (s === "FINALIZADO" && pedido.status !== "FINALIZADO" && saldoAberto > 0.005) {
+      setAviso(
+        `Ainda falta receber ${brl(saldoAberto)}. Registre o pagamento — quando fechar o total, o pedido finaliza sozinho. Se for dar desconto, lance o desconto e depois toque em Finalizado.`,
+      );
+      return;
+    }
+    setAviso("");
+    aoMudarStatus(s);
+  }
+
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <TipoChip tipo={pedido.tipo} />
-      <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 md:mx-0 md:px-0">
-        {STATUS_DISPONIVEIS.filter(
-          // Voltar pra rascunho só antes de receber algum pagamento — senão o
-          // pedido some do financeiro com dinheiro já recebido.
-          (s) => s !== "RASCUNHO" || pedido.status === "RASCUNHO" || !(pedido.valorPago > 0),
-        ).map((s) => (
-          <button
-            key={s}
-            onClick={() => aoMudarStatus(s)}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition ${
-              pedido.status === s
-                ? "bg-acento text-acento-texto"
-                : "border border-borda bg-superficie text-texto-suave hover:bg-superficie-2"
-            }`}
-          >
-            {ROTULO_STATUS[s]}
-          </button>
-        ))}
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <TipoChip tipo={pedido.tipo} />
+        <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 md:mx-0 md:px-0">
+          {STATUS_DISPONIVEIS.filter(
+            // Voltar pra rascunho só antes de receber algum pagamento — senão o
+            // pedido some do financeiro com dinheiro já recebido.
+            (s) => s !== "RASCUNHO" || pedido.status === "RASCUNHO" || !(pedido.valorPago > 0),
+          ).map((s) => {
+            const bloqueado =
+              s === "FINALIZADO" && pedido.status !== "FINALIZADO" && saldoAberto > 0.005;
+            return (
+              <button
+                key={s}
+                onClick={() => escolher(s)}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold transition ${
+                  pedido.status === s
+                    ? "bg-acento text-acento-texto"
+                    : "border border-borda bg-superficie text-texto-suave hover:bg-superficie-2"
+                } ${bloqueado ? "opacity-50" : ""}`}
+              >
+                {ROTULO_STATUS[s]}
+              </button>
+            );
+          })}
+        </div>
       </div>
+      {aviso && (
+        <p className="rounded-lg border border-ouro-300 bg-ouro-50 px-3 py-2 text-xs dark:bg-ouro-900/20">
+          {aviso}
+        </p>
+      )}
     </div>
   );
 }
