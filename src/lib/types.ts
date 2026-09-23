@@ -154,6 +154,10 @@ export interface EstoqueMovimento {
   quantidadeUn: number;
   custoUn?: number;
   fornecedorId?: string;
+  /** Só em compra: pago na hora ou a prazo (gera conta a pagar). */
+  pagamento?: "AVISTA" | "PRAZO";
+  /** Conta a pagar criada por uma compra a prazo. */
+  contaPagarId?: string;
   /** Id do pedido ou da compra que gerou o movimento. */
   referenciaId?: string;
   data: string;

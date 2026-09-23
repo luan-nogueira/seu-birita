@@ -27,6 +27,14 @@ const ROTULO_ORIGEM: Record<EstoqueOrigem, string> = {
   PERDA: "Perda",
 };
 
+/** Soma dias a uma data YYYY-MM-DD, sem passar por UTC. */
+function somarDias(iso: string, dias: number): string {
+  const [a, m, d] = iso.split("-").map(Number);
+  const dt = new Date(a, m - 1, d + dias);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
+}
+
 /** Primeiro dia do mês atual, formato YYYY-MM-DD. */
 function inicioDoMes(): string {
   const hoje = new Date();
@@ -49,6 +57,7 @@ function EstoquePageInterno() {
     salvarMovimento,
     salvarProduto,
     salvarFornecedor,
+    salvarContaPagar,
     produtoPorId,
     pedidoPorId,
     removerMovimento,
@@ -95,6 +104,8 @@ function EstoquePageInterno() {
   const [fornecedorId, setFornecedorId] = useState("");
   // Cadastro rápido de fornecedor direto na compra, só com o nome.
   const [novoFornecedor, setNovoFornecedor] = useState<string | null>(null);
+  const [pagamento, setPagamento] = useState<"AVISTA" | "PRAZO">("AVISTA");
+  const [vencimento, setVencimento] = useState(() => somarDias(hojeISO(), 30));
   const [quantidadeUn, setQuantidadeUn] = useState("");
   const [custoTotal, setCustoTotal] = useState("");
   const [obs, setObs] = useState("");
@@ -163,6 +174,25 @@ function EstoquePageInterno() {
         }
       }
 
+      // Compra a prazo vira uma conta a pagar no Financeiro.
+      let contaPagarId: string | undefined;
+      if (tipoMovimento === "COMPRA" && pagamento === "PRAZO" && Number(custoTotal) > 0) {
+        contaPagarId = novoId();
+        const nomeFornecedor =
+          fornecedores.find((f) => f.id === fornecedorFinal)?.nome ?? nomeNovo;
+        await salvarContaPagar({
+          id: contaPagarId,
+          descricao: `Compra: ${qtd} un de ${produto.nome}`,
+          fornecedorId: fornecedorFinal || undefined,
+          fornecedorNome: nomeFornecedor || undefined,
+          valor: Number(custoTotal),
+          vencimento: vencimento || hojeISO(),
+          obs: obs || undefined,
+          pago: false,
+          criadoEm: new Date().toISOString(),
+        });
+      }
+
       let custoUn: number | undefined = undefined;
       if (tipoMovimento === "COMPRA" && custoTotal) {
         custoUn = Number(custoTotal) / qtd;
@@ -177,6 +207,8 @@ function EstoquePageInterno() {
         quantidadeUn: qtd,
         custoUn,
         fornecedorId: fornecedorFinal || undefined,
+        pagamento: tipoMovimento === "COMPRA" ? pagamento : undefined,
+        contaPagarId,
         // Data local (não toISOString) — depois das 21h no fuso do Brasil,
         // o timestamp UTC já vira o dia seguinte e a movimentação aparecia
         // com a data errada no histórico.
@@ -221,6 +253,8 @@ function EstoquePageInterno() {
       setBuscaProduto("");
       setFornecedorId("");
       setNovoFornecedor(null);
+      setPagamento("AVISTA");
+      setVencimento(somarDias(hojeISO(), 30));
       setQuantidadeUn("");
       setCustoTotal("");
       setObs("");
@@ -522,6 +556,44 @@ function EstoquePageInterno() {
             )}
           </div>
 
+          {tipoMovimento === "COMPRA" && (
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold">Pagamento</label>
+              <div className="grid grid-cols-2 gap-1 rounded-xl bg-superficie-2 p-1">
+                {(["AVISTA", "PRAZO"] as const).map((op) => (
+                  <button
+                    key={op}
+                    type="button"
+                    onClick={() => setPagamento(op)}
+                    className={`rounded-lg py-2 text-sm font-bold transition ${
+                      pagamento === op ? "bg-superficie shadow-sm" : "text-texto-suave"
+                    }`}
+                  >
+                    {op === "AVISTA" ? "À vista" : "A prazo"}
+                  </button>
+                ))}
+              </div>
+              {pagamento === "PRAZO" && (
+                <div className="mt-3">
+                  <label className="mb-1.5 block text-sm font-semibold" htmlFor="vencimento-compra">
+                    Vencimento
+                  </label>
+                  <input
+                    id="vencimento-compra"
+                    type="date"
+                    required
+                    value={vencimento}
+                    onChange={(e) => setVencimento(e.target.value)}
+                    className="campo block w-full"
+                  />
+                  <p className="mt-1 text-xs text-texto-suave">
+                    Vai entrar em <strong>Financeiro → Contas a pagar</strong> com o valor total da compra.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {tipoMovimento === "COMPRA" && quantidadeUn && custoTotal && (
             <div className="bg-emerald-50 dark:bg-emerald-950/30 p-3 rounded-xl border border-emerald-200 dark:border-emerald-900/50 flex items-center gap-3">
               <div className="bg-emerald-100 dark:bg-emerald-900 text-emerald-600 dark:text-emerald-400 p-2 rounded-lg shrink-0">
@@ -572,7 +644,7 @@ function ModalHistorico({
   movimentos: EstoqueMovimento[];
   aoFechar: () => void;
 }) {
-  const { pedidoPorId, fornecedores } = useDados();
+  const { pedidoPorId, fornecedores, contasPagar } = useDados();
   const [de, setDe] = useState(inicioDoMes());
   const [ate, setAte] = useState(hojeISO());
 
@@ -601,6 +673,15 @@ function ModalHistorico({
             : undefined;
           detalhe = f ? f.nome : "sem fornecedor";
           if (m.custoUn) detalhe += (detalhe ? " · " : "") + brl(m.custoUn) + "/un";
+          if (m.pagamento === "AVISTA") detalhe += " · à vista";
+          if (m.pagamento === "PRAZO") {
+            const conta = m.contaPagarId
+              ? contasPagar.find((c) => c.id === m.contaPagarId)
+              : undefined;
+            detalhe += conta
+              ? ` · a prazo, ${conta.pago ? "pago" : `vence ${dataBR(conta.vencimento)}`}`
+              : " · a prazo";
+          }
         }
         resultado.push({
           chave: m.id,
@@ -637,7 +718,7 @@ function ModalHistorico({
     }
 
     return resultado.sort((x, y) => y.data.localeCompare(x.data));
-  }, [movimentos, de, ate, pedidoPorId, fornecedores]);
+  }, [movimentos, de, ate, pedidoPorId, fornecedores, contasPagar]);
 
   const totalSaida = linhas.filter((l) => l.quantidade < 0).reduce((s, l) => s - l.quantidade, 0);
   const totalEntrada = linhas.filter((l) => l.quantidade > 0).reduce((s, l) => s + l.quantidade, 0);
