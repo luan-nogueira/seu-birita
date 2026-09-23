@@ -154,7 +154,7 @@ const CORES_STATUS: Record<PedidoStatus, string> = {
 const ROTULOS_STATUS: Record<PedidoStatus, string> = {
   RASCUNHO: "Rascunho",
   ENTREGUE: "Entregue",
-  ACERTO: "Em acerto",
+  ACERTO: "Aguardando acerto",
   FINALIZADO: "Finalizado",
   CANCELADO: "Cancelado",
 };

@@ -15,7 +15,7 @@ const FILTROS: { valor: PedidoStatus | "TODOS"; rotulo: string }[] = [
   { valor: "TODOS", rotulo: "Todos" },
   { valor: "RASCUNHO", rotulo: "Rascunhos" },
   { valor: "ENTREGUE", rotulo: "Entregues" },
-  { valor: "ACERTO", rotulo: "Em acerto" },
+  { valor: "ACERTO", rotulo: "Aguardando acerto" },
   { valor: "FINALIZADO", rotulo: "Finalizados" },
 ];
 
