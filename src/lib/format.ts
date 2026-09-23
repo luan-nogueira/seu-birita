@@ -75,3 +75,21 @@ export function telefoneBR(valor: string): string {
   if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
   return valor;
 }
+
+/**
+ * Quebra uma quantidade em unidades em "X cx + Y un". Faz a conta no valor
+ * absoluto e põe o sinal na frente: com Math.floor direto, um estoque
+ * negativo arredondava pra longe do zero (-119 un em cx de 24 virava
+ * "-5 cx" em vez de "-4 cx - 23 un").
+ */
+export function caixasEUnidades(totalUn: number, unPorCaixa: number): string {
+  if (unPorCaixa <= 1) return `${totalUn} un`;
+  const negativo = totalUn < 0;
+  const abs = Math.abs(totalUn);
+  const cx = Math.floor(abs / unPorCaixa);
+  const un = abs % unPorCaixa;
+  const sinal = negativo ? "-" : "";
+  const juntar = negativo ? " - " : " + ";
+  if (cx === 0) return `${sinal}${un} un`;
+  return un > 0 ? `${sinal}${cx} cx${juntar}${un} un` : `${sinal}${cx} cx`;
+}

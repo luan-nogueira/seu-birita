@@ -5,7 +5,7 @@ import { Cabecalho, Modal } from "@/components/ui";
 import { Protegido } from "@/components/Protegido";
 import { useDados } from "@/lib/store";
 import { novoId } from "@/lib/db";
-import { brl, dataBR, dataHoraBR, hojeISO, normalizar } from "@/lib/format";
+import { brl, caixasEUnidades, dataBR, dataHoraBR, hojeISO, normalizar } from "@/lib/format";
 import { compararCategorias } from "@/lib/calc";
 import {
   AlertTriangle,
@@ -302,7 +302,7 @@ function EstoquePageInterno() {
                             <span className="block">{p.estoqueUn} un</span>
                             {p.unPorCaixa > 1 && (
                               <span className="block text-[10px] text-texto-suave/80 font-bold uppercase mt-0.5">
-                                {Math.floor(p.estoqueUn / p.unPorCaixa)} cx {p.estoqueUn % p.unPorCaixa > 0 && `+ ${p.estoqueUn % p.unPorCaixa} un`}
+                                {caixasEUnidades(p.estoqueUn, p.unPorCaixa)}
                               </span>
                             )}
                           </div>
@@ -493,6 +493,17 @@ function EstoquePageInterno() {
 }
 
 /** Histórico de um produto — com filtro de data, pra saber "quanto vendi em X". */
+interface LinhaHistorico {
+  chave: string;
+  rotulo: string;
+  detalhe: string;
+  data: string;
+  obs?: string;
+  /** Positivo = entrou no galpão, negativo = saiu. */
+  quantidade: number;
+  dePedido?: boolean;
+}
+
 function ModalHistorico({
   produto,
   movimentos,
@@ -506,19 +517,71 @@ function ModalHistorico({
   const [de, setDe] = useState(inicioDoMes());
   const [ate, setAte] = useState(hojeISO());
 
-  const noPeriodo = useMemo(
-    () =>
-      movimentos
-        .filter((m) => {
-          const data = m.data.slice(0, 10);
-          return data >= de && data <= ate;
-        })
-        .sort((a, b) => b.data.localeCompare(a.data)),
-    [movimentos, de, ate],
-  );
+  // Lançamentos de pedido (saída/devolução) são agrupados numa linha só por
+  // pedido, com o saldo líquido. O salvamento automático do pedido lança um
+  // movimento a cada ajuste de quantidade (digitou 100, corrigiu pra 81,
+  // lançou devolução…), o que enchia o histórico de linhas que se anulam.
+  // Compra, ajuste e perda continuam aparecendo um por um.
+  const linhas = useMemo(() => {
+    const doPeriodo = movimentos.filter((m) => {
+      const data = m.data.slice(0, 10);
+      return data >= de && data <= ate;
+    });
 
-  const totalSaida = noPeriodo.filter((m) => m.tipo === "SAIDA").reduce((s, m) => s + m.quantidadeUn, 0);
-  const totalEntrada = noPeriodo.filter((m) => m.tipo === "ENTRADA").reduce((s, m) => s + m.quantidadeUn, 0);
+    const resultado: LinhaHistorico[] = [];
+    const porPedido = new Map<string, LinhaHistorico>();
+
+    for (const m of doPeriodo) {
+      const dePedido =
+        (m.origem === "PEDIDO" || m.origem === "DEVOLUCAO") && m.referenciaId;
+      if (!dePedido) {
+        let detalhe = "";
+        if (m.origem === "COMPRA") {
+          const f = m.fornecedorId
+            ? fornecedores.find((x) => x.id === m.fornecedorId)
+            : undefined;
+          if (f) detalhe = f.nome;
+          if (m.custoUn) detalhe += (detalhe ? " · " : "") + brl(m.custoUn) + "/un";
+        }
+        resultado.push({
+          chave: m.id,
+          rotulo: ROTULO_ORIGEM[m.origem],
+          detalhe,
+          data: m.data,
+          obs: m.obs,
+          // AJUSTE é gravado com tipo "AJUSTE" mas sempre soma (ver handleSubmit).
+          quantidade: m.tipo === "SAIDA" ? -m.quantidadeUn : m.quantidadeUn,
+        });
+        continue;
+      }
+
+      const sinal = m.tipo === "SAIDA" ? -1 : 1;
+      const existente = porPedido.get(m.referenciaId!);
+      if (existente) {
+        existente.quantidade += sinal * m.quantidadeUn;
+        if (m.data > existente.data) existente.data = m.data;
+      } else {
+        const pedido = pedidoPorId(m.referenciaId!);
+        const linha: LinhaHistorico = {
+          chave: m.referenciaId!,
+          rotulo: pedido ? `Pedido #${String(pedido.numero).padStart(3, "0")}` : "Pedido excluído",
+          detalhe: pedido
+            ? pedido.clienteNome + (pedido.titulo ? ` · ${pedido.titulo}` : "")
+            : "",
+          data: m.data,
+          quantidade: sinal * m.quantidadeUn,
+          dePedido: true,
+        };
+        porPedido.set(m.referenciaId!, linha);
+        resultado.push(linha);
+      }
+    }
+
+    return resultado.sort((x, y) => y.data.localeCompare(x.data));
+  }, [movimentos, de, ate, pedidoPorId, fornecedores]);
+
+  const totalSaida = linhas.filter((l) => l.quantidade < 0).reduce((s, l) => s - l.quantidade, 0);
+  const totalEntrada = linhas.filter((l) => l.quantidade > 0).reduce((s, l) => s + l.quantidade, 0);
 
   return (
     <Modal aberto aoFechar={aoFechar} titulo={produto.nome} largura="max-w-xl">
@@ -540,7 +603,7 @@ function ModalHistorico({
             </span>
             {produto.unPorCaixa > 1 && (
               <span className="block text-[11px] font-semibold text-texto-suave uppercase">
-                {Math.floor(produto.estoqueUn / produto.unPorCaixa)} cx {produto.estoqueUn % produto.unPorCaixa > 0 && `+ ${produto.estoqueUn % produto.unPorCaixa} un`}
+                {caixasEUnidades(produto.estoqueUn, produto.unPorCaixa)}
               </span>
             )}
           </div>
@@ -553,26 +616,26 @@ function ModalHistorico({
         )}
 
         <div className="grid grid-cols-2 gap-3">
-          <div>
+          <div className="min-w-0">
             <label className="rotulo" htmlFor="hist-de">
               De
             </label>
             <input
               id="hist-de"
               type="date"
-              className="campo"
+              className="campo w-full min-w-0"
               value={de}
               onChange={(e) => setDe(e.target.value)}
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <label className="rotulo" htmlFor="hist-ate">
               Até
             </label>
             <input
               id="hist-ate"
               type="date"
-              className="campo"
+              className="campo w-full min-w-0"
               value={ate}
               onChange={(e) => setAte(e.target.value)}
             />
@@ -600,57 +663,55 @@ function ModalHistorico({
           </div>
         </div>
 
-        {noPeriodo.length === 0 ? (
+        {linhas.length === 0 ? (
           <p className="py-8 text-center text-sm text-texto-suave">
             Nenhuma movimentação nesse período.
           </p>
         ) : (
           <ul className="card divide-y divide-borda overflow-hidden">
-            {noPeriodo.map((m) => {
-              const isEntrada = m.tipo === "ENTRADA";
-              let detalhesStr = "";
-              if ((m.origem === "PEDIDO" || m.origem === "DEVOLUCAO") && m.referenciaId) {
-                const p = pedidoPorId(m.referenciaId);
-                if (p) {
-                  detalhesStr = p.clienteNome;
-                  if (p.titulo) detalhesStr += ` (${p.titulo})`;
-                }
-              } else if (m.origem === "COMPRA") {
-                const f = m.fornecedorId
-                  ? fornecedores.find((x) => x.id === m.fornecedorId)
-                  : undefined;
-                if (f) {
-                  detalhesStr = f.nome;
-                }
-                if (m.custoUn) {
-                  detalhesStr += (detalhesStr ? " · " : "") + brl(m.custoUn) + "/un";
-                }
-              }
-
+            {linhas.map((l) => {
+              const entrada = l.quantidade > 0;
+              const zerado = l.quantidade === 0;
               return (
-                <li key={m.id} className="flex items-center gap-3 px-4 py-2.5">
-                  {isEntrada ? (
+                <li key={l.chave} className="flex items-center gap-3 px-4 py-2.5">
+                  {zerado ? (
+                    <span className="h-4 w-4 shrink-0" />
+                  ) : entrada ? (
                     <ArrowDown className="h-4 w-4 shrink-0 text-emerald-500" />
                   ) : (
                     <ArrowUp className="h-4 w-4 shrink-0 text-red-500" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold">
-                      {ROTULO_ORIGEM[m.origem]}
-                      {detalhesStr && <span className="ml-1 text-xs text-texto-suave font-normal">({detalhesStr})</span>}
+                    <p className="truncate text-sm font-semibold">
+                      {l.rotulo}
+                      {l.detalhe && (
+                        <span className="ml-1 text-xs font-normal text-texto-suave">
+                          {l.detalhe}
+                        </span>
+                      )}
                     </p>
                     <p className="text-xs text-texto-suave">
-                      {dataBR(m.data)}
-                      {m.obs && ` · ${m.obs}`}
+                      {dataBR(l.data)}
+                      {l.dePedido &&
+                        (zerado
+                          ? " · tudo voltou"
+                          : entrada
+                            ? " · devolução líquida"
+                            : " · saída líquida")}
+                      {l.obs && ` · ${l.obs}`}
                     </p>
                   </div>
                   <span
                     className={`shrink-0 text-sm font-black tabular-nums ${
-                      isEntrada ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+                      zerado
+                        ? "text-texto-suave"
+                        : entrada
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-red-600 dark:text-red-400"
                     }`}
                   >
-                    {isEntrada ? "+" : "-"}
-                    {m.quantidadeUn} un
+                    {entrada ? "+" : ""}
+                    {l.quantidade} un
                   </span>
                 </li>
               );

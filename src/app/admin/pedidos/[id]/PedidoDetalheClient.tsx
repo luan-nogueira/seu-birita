@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  ArrowLeftRight,
   Check,
   ClipboardList,
   CloudUpload,
@@ -50,6 +51,7 @@ import type {
   Pedido,
   PedidoItem,
   PedidoStatus,
+  PedidoTipo,
 } from "@/lib/types";
 
 // "Aguardando acerto" = a devolução do evento já foi conferida e lançada,
@@ -311,6 +313,7 @@ function PedidoPageInterno() {
         <BarraStatus
           pedido={pedido}
           aoMudarStatus={(status) => atualizar({ status })}
+          aoMudarTipo={(tipo) => atualizar({ tipo })}
         />
 
         <Resumo pedido={pedido} totais={totais} />
@@ -477,11 +480,17 @@ function IndicadorSalvamento({ salvando }: { salvando: boolean }) {
 function BarraStatus({
   pedido,
   aoMudarStatus,
+  aoMudarTipo,
 }: {
   pedido: Pedido;
   aoMudarStatus: (s: PedidoStatus) => void;
+  aoMudarTipo: (t: PedidoTipo) => void;
 }) {
   const [aviso, setAviso] = useState("");
+  const [trocandoTipo, setTrocandoTipo] = useState(false);
+  const novoTipo: PedidoTipo =
+    pedido.tipo === "CONSIGNACAO" ? "VENDA_DIRETA" : "CONSIGNACAO";
+  const temDevolucao = pedido.itens.some((i) => i.devolucaoCx > 0 || i.devolucaoUn > 0);
   const saldoAberto = calcularTotais(pedido).saldoAberto;
 
   function escolher(s: PedidoStatus) {
@@ -501,7 +510,14 @@ function BarraStatus({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <TipoChip tipo={pedido.tipo} />
+        <button
+          onClick={() => setTrocandoTipo(true)}
+          className="flex items-center gap-1 rounded-full transition hover:opacity-80"
+          aria-label="Trocar tipo do pedido"
+        >
+          <TipoChip tipo={pedido.tipo} />
+          <ArrowLeftRight className="h-3.5 w-3.5 text-texto-suave" />
+        </button>
         <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 md:mx-0 md:px-0">
           {STATUS_DISPONIVEIS.filter(
             // Voltar pra rascunho só antes de receber algum pagamento — senão o
@@ -531,6 +547,45 @@ function BarraStatus({
           {aviso}
         </p>
       )}
+
+      <Modal
+        aberto={trocandoTipo}
+        aoFechar={() => setTrocandoTipo(false)}
+        titulo="Trocar tipo do pedido"
+        rodape={
+          <>
+            <button className="btn-secundario" onClick={() => setTrocandoTipo(false)}>
+              Cancelar
+            </button>
+            <button
+              className="btn-primario"
+              onClick={() => {
+                aoMudarTipo(novoTipo);
+                setTrocandoTipo(false);
+              }}
+            >
+              Trocar para {novoTipo === "CONSIGNACAO" ? "Consignação" : "Venda direta"}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-2 text-sm text-texto-suave">
+          <p>
+            Mudar este pedido de{" "}
+            <strong>{pedido.tipo === "CONSIGNACAO" ? "Consignação" : "Venda direta"}</strong> para{" "}
+            <strong>{novoTipo === "CONSIGNACAO" ? "Consignação" : "Venda direta"}</strong>?
+          </p>
+          {novoTipo === "CONSIGNACAO" ? (
+            <p>Vai aparecer o campo de devolução em cada item, pra lançar o que voltou do evento.</p>
+          ) : (
+            <p>
+              Em venda direta não existe devolução: o cliente paga tudo o que foi entregue.
+              {temDevolucao &&
+                " As devoluções já lançadas deixam de contar (valor e estoque), mas ficam guardadas — se voltar pra Consignação, elas voltam."}
+            </p>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }
