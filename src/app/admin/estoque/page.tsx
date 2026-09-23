@@ -13,11 +13,18 @@ import {
   ArrowUp,
   Boxes,
   ChevronRight,
+  Pencil,
   Plus,
   RefreshCcw,
   Search,
 } from "lucide-react";
-import type { EstoqueMovimento, EstoqueOrigem, EstoqueTipo, Produto } from "@/lib/types";
+import type {
+  ContaPagar,
+  EstoqueMovimento,
+  EstoqueOrigem,
+  Fornecedor,
+  Produto,
+} from "@/lib/types";
 
 const ROTULO_ORIGEM: Record<EstoqueOrigem, string> = {
   COMPRA: "Compra",
@@ -31,6 +38,246 @@ const ROTULO_ORIGEM: Record<EstoqueOrigem, string> = {
 function somarDias(iso: string, dias: number): string {
   const [a, m, d] = iso.split("-").map(Number);
   const dt = new Date(a, m - 1, d + dias);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
+}
+
+type FormaCompra = "AVISTA" | "PRAZO";
+
+/** Divide em parcelas de centavos inteiros; a última leva a sobra do arredondamento. */
+function dividirParcelas(valor: number, n: number): number[] {
+  const centavos = Math.round(valor * 100);
+  const base = Math.floor(centavos / n);
+  return Array.from({ length: n }, (_, i) =>
+    (i === n - 1 ? centavos - base * (n - 1) : base) / 100,
+  );
+}
+
+/** Contas a pagar de uma compra — aceita o formato antigo (uma conta só). */
+function idsDasContas(m: EstoqueMovimento): string[] {
+  return m.contaPagarIds ?? (m.contaPagarId ? [m.contaPagarId] : []);
+}
+
+/**
+ * Devolve o fornecedor escolhido; se foi digitado um nome novo, cadastra
+ * (ou reaproveita um já existente com o mesmo nome).
+ */
+async function resolverFornecedor(
+  fornecedores: Fornecedor[],
+  salvarFornecedor: (f: Fornecedor) => Promise<void>,
+  fornecedorId: string,
+  novoNome: string | null,
+): Promise<{ id?: string; nome?: string }> {
+  const nome = novoNome?.trim();
+  if (nome) {
+    const existente = fornecedores.find((f) => normalizar(f.nome) === normalizar(nome));
+    if (existente) return { id: existente.id, nome: existente.nome };
+    const id = novoId();
+    await salvarFornecedor({ id, nome, ativo: true, criadoEm: new Date().toISOString() });
+    return { id, nome };
+  }
+  const f = fornecedores.find((x) => x.id === fornecedorId);
+  return f ? { id: f.id, nome: f.nome } : {};
+}
+
+/** Cria uma conta a pagar por parcela, todo mês no mesmo dia do 1º vencimento. */
+async function criarContasPrazo(
+  salvarContaPagar: (c: ContaPagar) => Promise<void>,
+  dados: {
+    valorTotal: number;
+    parcelas: number;
+    primeiroVencimento: string;
+    descricao: string;
+    fornecedor: { id?: string; nome?: string };
+    obs?: string;
+  },
+): Promise<string[]> {
+  const valores = dividirParcelas(dados.valorTotal, dados.parcelas);
+  const ids: string[] = [];
+  for (let i = 0; i < valores.length; i++) {
+    const id = novoId();
+    await salvarContaPagar({
+      id,
+      descricao:
+        dados.parcelas > 1
+          ? `${dados.descricao} (${i + 1}/${dados.parcelas})`
+          : dados.descricao,
+      fornecedorId: dados.fornecedor.id,
+      fornecedorNome: dados.fornecedor.nome,
+      valor: valores[i],
+      vencimento: somarMeses(dados.primeiroVencimento || hojeISO(), i),
+      obs: dados.obs || undefined,
+      pago: false,
+      criadoEm: new Date().toISOString(),
+    });
+    ids.push(id);
+  }
+  return ids;
+}
+
+function CampoFornecedor({
+  fornecedores,
+  fornecedorId,
+  novoNome,
+  aoMudar,
+}: {
+  fornecedores: Fornecedor[];
+  fornecedorId: string;
+  /** null = escolhendo da lista; string = digitando um fornecedor novo. */
+  novoNome: string | null;
+  aoMudar: (fornecedorId: string, novoNome: string | null) => void;
+}) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-sm font-semibold">Fornecedor (Opcional)</label>
+      {novoNome === null ? (
+        <select
+          value={fornecedorId}
+          onChange={(e) =>
+            e.target.value === "__novo__" ? aoMudar("", "") : aoMudar(e.target.value, null)
+          }
+          className="campo block w-full"
+        >
+          <option value="">Nenhum fornecedor vinculado</option>
+          {fornecedores
+            .filter((f) => f.ativo !== false)
+            .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+            .map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.nome}
+              </option>
+            ))}
+          <option value="__novo__">+ Cadastrar novo fornecedor</option>
+        </select>
+      ) : (
+        <>
+          <div className="flex gap-2">
+            <input
+              autoFocus
+              className="campo min-w-0 flex-1"
+              placeholder="Nome do fornecedor"
+              value={novoNome}
+              onChange={(e) => aoMudar("", e.target.value)}
+            />
+            <button type="button" className="btn-secundario shrink-0" onClick={() => aoMudar("", null)}>
+              Cancelar
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-texto-suave">
+            Será cadastrado ao confirmar. Telefone e outros dados dá pra completar
+            depois em Fornecedores.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function CamposPagamento({
+  pagamento,
+  setPagamento,
+  parcelas,
+  setParcelas,
+  vencimento,
+  setVencimento,
+  valorTotal,
+  bloqueado,
+}: {
+  pagamento: FormaCompra;
+  setPagamento: (p: FormaCompra) => void;
+  parcelas: number;
+  setParcelas: (n: number) => void;
+  vencimento: string;
+  setVencimento: (v: string) => void;
+  valorTotal: number;
+  /** Mensagem quando não dá pra mudar (ex.: já tem parcela paga). */
+  bloqueado?: string;
+}) {
+  const valores = valorTotal > 0 ? dividirParcelas(valorTotal, parcelas) : [];
+  return (
+    <div>
+      <label className="mb-1.5 block text-sm font-semibold">Pagamento</label>
+      <div className="grid grid-cols-2 gap-1 rounded-xl bg-superficie-2 p-1">
+        {(["AVISTA", "PRAZO"] as const).map((op) => (
+          <button
+            key={op}
+            type="button"
+            disabled={!!bloqueado}
+            onClick={() => setPagamento(op)}
+            className={`rounded-lg py-2 text-sm font-bold transition disabled:opacity-60 ${
+              pagamento === op ? "bg-superficie shadow-sm" : "text-texto-suave"
+            }`}
+          >
+            {op === "AVISTA" ? "À vista" : "A prazo"}
+          </button>
+        ))}
+      </div>
+      {bloqueado && <p className="mt-1 text-xs text-texto-suave">{bloqueado}</p>}
+      {pagamento === "PRAZO" && !bloqueado && (
+        <div className="mt-3 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="min-w-0">
+              <label className="mb-1.5 block text-sm font-semibold" htmlFor="parcelas-compra">
+                Parcelas
+              </label>
+              <select
+                id="parcelas-compra"
+                value={parcelas}
+                onChange={(e) => setParcelas(Number(e.target.value))}
+                className="campo block w-full"
+              >
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>
+                    {n === 1 ? "1x (única)" : `${n}x`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-0">
+              <label className="mb-1.5 block text-sm font-semibold" htmlFor="vencimento-compra">
+                {parcelas > 1 ? "1º vencimento" : "Vencimento"}
+              </label>
+              <input
+                id="vencimento-compra"
+                type="date"
+                required
+                value={vencimento}
+                onChange={(e) => setVencimento(e.target.value)}
+                className="campo block w-full"
+              />
+            </div>
+          </div>
+          {valores.length > 1 && (
+            <ul className="rounded-xl border border-borda px-3 py-2 text-xs text-texto-suave">
+              {valores.map((v, i) => (
+                <li key={i} className="flex justify-between py-0.5 tabular-nums">
+                  <span>
+                    {i + 1}/{valores.length} · {dataBR(somarMeses(vencimento || hojeISO(), i))}
+                  </span>
+                  <span className="font-semibold text-texto">{brl(v)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="text-xs text-texto-suave">
+            {parcelas > 1
+              ? "Cada parcela entra em Financeiro → Contas a pagar, todo mês no mesmo dia."
+              : "Vai entrar em Financeiro → Contas a pagar com o valor total da compra."}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Mesmo dia N meses depois (parcela mensal). Se o mês não tem esse dia
+ * (ex.: 31), cai no último dia do mês.
+ */
+function somarMeses(iso: string, meses: number): string {
+  const [a, m, d] = iso.split("-").map(Number);
+  const ultimoDia = new Date(a, m - 1 + meses + 1, 0).getDate();
+  const dt = new Date(a, m - 1 + meses, Math.min(d, ultimoDia));
   const p = (n: number) => String(n).padStart(2, "0");
   return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
 }
@@ -104,13 +351,26 @@ function EstoquePageInterno() {
   const [fornecedorId, setFornecedorId] = useState("");
   // Cadastro rápido de fornecedor direto na compra, só com o nome.
   const [novoFornecedor, setNovoFornecedor] = useState<string | null>(null);
-  const [pagamento, setPagamento] = useState<"AVISTA" | "PRAZO">("AVISTA");
+  const [pagamento, setPagamento] = useState<FormaCompra>("AVISTA");
+  const [parcelas, setParcelas] = useState(1);
   const [vencimento, setVencimento] = useState(() => somarDias(hojeISO(), 30));
   const [quantidadeUn, setQuantidadeUn] = useState("");
+  // Só no Ajuste: contagem do galpão em caixas (as unidades soltas vão em quantidadeUn).
+  const [contagemCx, setContagemCx] = useState("");
   const [custoTotal, setCustoTotal] = useState("");
   const [obs, setObs] = useState("");
   const [buscaProduto, setBuscaProduto] = useState("");
   const [focoBusca, setFocoBusca] = useState(false);
+
+  const produtoSelecionado = produtoId ? produtoPorId(produtoId) : undefined;
+
+  // Ajuste = "contei X no galpão". O sistema lança só a diferença pro
+  // estoque bater com a contagem, em vez de a pessoa ter que fazer a conta.
+  const contagem = useMemo(() => {
+    if (quantidadeUn === "" && contagemCx === "") return null;
+    const porCaixa = produtoSelecionado?.unPorCaixa ?? 1;
+    return Number(contagemCx || 0) * porCaixa + Number(quantidadeUn || 0);
+  }, [quantidadeUn, contagemCx, produtoSelecionado]);
 
   const produtosOrdenados = [...produtos].filter((p) => p.ativo);
   const produtosFiltrados = produtosOrdenados.filter((p) =>
@@ -134,95 +394,116 @@ function EstoquePageInterno() {
     return Array.from(mapa.entries()).sort(([a], [b]) => compararCategorias(a, b));
   }, [visiveis]);
 
+  function limparFormulario() {
+    setModalAberto(false);
+    setProdutoId("");
+    setBuscaProduto("");
+    setFornecedorId("");
+    setNovoFornecedor(null);
+    setPagamento("AVISTA");
+    setParcelas(1);
+    setVencimento(somarDias(hojeISO(), 30));
+    setQuantidadeUn("");
+    setContagemCx("");
+    setCustoTotal("");
+    setObs("");
+    setTipoMovimento("COMPRA");
+  }
+
+  async function lancarAjuste(produto: Produto) {
+    if (contagem === null || contagem < 0) return;
+    const diferenca = contagem - produto.estoqueUn;
+    if (diferenca === 0) {
+      window.alert("A contagem bate com o estoque do sistema — nada a ajustar.");
+      return;
+    }
+    await salvarMovimento({
+      id: novoId(),
+      produtoId: produto.id,
+      produtoNome: produto.nome,
+      tipo: diferenca > 0 ? "ENTRADA" : "SAIDA",
+      origem: "AJUSTE",
+      quantidadeUn: Math.abs(diferenca),
+      data: hojeISO(),
+      obs: [`Contagem: ${contagem} un (sistema tinha ${produto.estoqueUn})`, obs]
+        .filter(Boolean)
+        .join(" · "),
+      criadoEm: new Date().toISOString(),
+    });
+    await salvarProduto({
+      ...produto,
+      estoqueUn: contagem,
+      atualizadoEm: new Date().toISOString(),
+    });
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!produtoId || !quantidadeUn) return;
+    const produto = produtoSelecionado;
+    if (!produto) return;
+
+    if (tipoMovimento === "AJUSTE") {
+      setSalvando(true);
+      try {
+        await lancarAjuste(produto);
+        limparFormulario();
+      } finally {
+        setSalvando(false);
+      }
+      return;
+    }
 
     const qtd = Number(quantidadeUn);
-    if (qtd <= 0) return;
+    if (!quantidadeUn || qtd <= 0) return;
+    const compra = tipoMovimento === "COMPRA";
 
     setSalvando(true);
     try {
-      const produto = produtoPorId(produtoId);
-      if (!produto) throw new Error("Produto não encontrado");
+      const fornecedor = compra
+        ? await resolverFornecedor(fornecedores, salvarFornecedor, fornecedorId, novoFornecedor)
+        : {};
 
-      const tipoEntrada: EstoqueTipo =
-        tipoMovimento === "COMPRA" || tipoMovimento === "DEVOLUCAO"
-          ? "ENTRADA"
-          : tipoMovimento === "PERDA"
-            ? "SAIDA"
-            : "AJUSTE";
-
-      const isEntrada = tipoEntrada === "ENTRADA" || (tipoEntrada === "AJUSTE" && tipoMovimento !== "PERDA");
-
-      let fornecedorFinal = fornecedorId;
-      const nomeNovo = novoFornecedor?.trim();
-      if (tipoMovimento === "COMPRA" && nomeNovo) {
-        const existente = fornecedores.find(
-          (f) => normalizar(f.nome) === normalizar(nomeNovo),
-        );
-        if (existente) {
-          fornecedorFinal = existente.id;
-        } else {
-          fornecedorFinal = novoId();
-          await salvarFornecedor({
-            id: fornecedorFinal,
-            nome: nomeNovo,
-            ativo: true,
-            criadoEm: new Date().toISOString(),
-          });
-        }
-      }
-
-      // Compra a prazo vira uma conta a pagar no Financeiro.
-      let contaPagarId: string | undefined;
-      if (tipoMovimento === "COMPRA" && pagamento === "PRAZO" && Number(custoTotal) > 0) {
-        contaPagarId = novoId();
-        const nomeFornecedor =
-          fornecedores.find((f) => f.id === fornecedorFinal)?.nome ?? nomeNovo;
-        await salvarContaPagar({
-          id: contaPagarId,
+      // Compra a prazo vira conta(s) a pagar no Financeiro, uma por parcela.
+      let contaPagarIds: string[] | undefined;
+      if (compra && pagamento === "PRAZO" && Number(custoTotal) > 0) {
+        contaPagarIds = await criarContasPrazo(salvarContaPagar, {
+          valorTotal: Number(custoTotal),
+          parcelas,
+          primeiroVencimento: vencimento,
           descricao: `Compra: ${qtd} un de ${produto.nome}`,
-          fornecedorId: fornecedorFinal || undefined,
-          fornecedorNome: nomeFornecedor || undefined,
-          valor: Number(custoTotal),
-          vencimento: vencimento || hojeISO(),
-          obs: obs || undefined,
-          pago: false,
-          criadoEm: new Date().toISOString(),
+          fornecedor,
+          obs,
         });
       }
 
       let custoUn: number | undefined = undefined;
-      if (tipoMovimento === "COMPRA" && custoTotal) {
+      if (compra && custoTotal) {
         custoUn = Number(custoTotal) / qtd;
       }
 
-      const novoMov: EstoqueMovimento = {
+      await salvarMovimento({
         id: novoId(),
-        produtoId,
+        produtoId: produto.id,
         produtoNome: produto.nome,
-        tipo: tipoEntrada,
+        tipo: compra ? "ENTRADA" : "SAIDA",
         origem: tipoMovimento,
         quantidadeUn: qtd,
         custoUn,
-        fornecedorId: fornecedorFinal || undefined,
-        pagamento: tipoMovimento === "COMPRA" ? pagamento : undefined,
-        contaPagarId,
+        fornecedorId: fornecedor.id,
+        pagamento: compra ? pagamento : undefined,
+        contaPagarIds,
         // Data local (não toISOString) — depois das 21h no fuso do Brasil,
         // o timestamp UTC já vira o dia seguinte e a movimentação aparecia
         // com a data errada no histórico.
         data: hojeISO(),
         obs: obs || undefined,
         criadoEm: new Date().toISOString(),
-      };
-
-      await salvarMovimento(novoMov);
+      });
 
       let novoPrecoCusto = produto.precoCusto;
-      if (tipoMovimento === "COMPRA" && custoUn !== undefined) {
+      if (compra && custoUn !== undefined) {
         const comprasAnteriores = movimentos
-          .filter((m) => m.produtoId === produtoId && m.origem === "COMPRA" && m.custoUn !== undefined)
+          .filter((m) => m.produtoId === produto.id && m.origem === "COMPRA" && m.custoUn !== undefined)
           .sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
           .slice(0, 2);
 
@@ -239,26 +520,14 @@ function EstoquePageInterno() {
 
       // Sem clamp em 0: negativo avisa que o lançado não bate com a
       // realidade, em vez de esconder o problema.
-      const novoEstoqueUn = isEntrada ? produto.estoqueUn + qtd : produto.estoqueUn - qtd;
-
       await salvarProduto({
         ...produto,
-        estoqueUn: novoEstoqueUn,
+        estoqueUn: compra ? produto.estoqueUn + qtd : produto.estoqueUn - qtd,
         precoCusto: novoPrecoCusto,
         atualizadoEm: new Date().toISOString(),
       });
 
-      setModalAberto(false);
-      setProdutoId("");
-      setBuscaProduto("");
-      setFornecedorId("");
-      setNovoFornecedor(null);
-      setPagamento("AVISTA");
-      setVencimento(somarDias(hojeISO(), 30));
-      setQuantidadeUn("");
-      setCustoTotal("");
-      setObs("");
-      setTipoMovimento("COMPRA");
+      limparFormulario();
     } finally {
       setSalvando(false);
     }
@@ -400,7 +669,11 @@ function EstoquePageInterno() {
             <button
               type="submit"
               form="form-movimento"
-              disabled={salvando || !produtoId || !quantidadeUn}
+              disabled={
+                salvando ||
+                !produtoId ||
+                (tipoMovimento === "AJUSTE" ? contagem === null : !quantidadeUn)
+              }
               className="btn-primario px-6 py-2"
             >
               {salvando ? "Salvando..." : "Confirmar Lançamento"}
@@ -466,132 +739,122 @@ function EstoquePageInterno() {
           </div>
 
           {tipoMovimento === "COMPRA" && (
+            <CampoFornecedor
+              fornecedores={fornecedores}
+              fornecedorId={fornecedorId}
+              novoNome={novoFornecedor}
+              aoMudar={(id, nome) => {
+                setFornecedorId(id);
+                setNovoFornecedor(nome);
+              }}
+            />
+          )}
+
+          {tipoMovimento === "AJUSTE" ? (
             <div>
-              <label className="mb-1.5 block text-sm font-semibold">Fornecedor (Opcional)</label>
-              {novoFornecedor === null ? (
-                <select
-                  value={fornecedorId}
-                  onChange={(e) => {
-                    if (e.target.value === "__novo__") {
-                      setFornecedorId("");
-                      setNovoFornecedor("");
-                    } else {
-                      setFornecedorId(e.target.value);
-                    }
-                  }}
-                  className="campo block w-full"
-                >
-                  <option value="">Nenhum fornecedor vinculado</option>
-                  {fornecedores
-                    .filter((f) => f.ativo !== false)
-                    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
-                    .map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.nome}
-                      </option>
-                    ))}
-                  <option value="__novo__">+ Cadastrar novo fornecedor</option>
-                </select>
-              ) : (
-                <div className="flex gap-2">
+              <label className="mb-1.5 block text-sm font-semibold">
+                Quantidade contada no galpão
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                {(produtoSelecionado?.unPorCaixa ?? 1) > 1 && (
+                  <div className="relative min-w-0">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      inputMode="numeric"
+                      value={contagemCx}
+                      onChange={(e) => setContagemCx(e.target.value)}
+                      placeholder="0"
+                      className="campo block w-full pr-10"
+                    />
+                    <span className="pointer-events-none absolute top-2.5 right-4 text-sm text-texto-suave">cx</span>
+                  </div>
+                )}
+                <div className="relative min-w-0">
                   <input
-                    autoFocus
-                    className="campo min-w-0 flex-1"
-                    placeholder="Nome do fornecedor"
-                    value={novoFornecedor}
-                    onChange={(e) => setNovoFornecedor(e.target.value)}
+                    type="number"
+                    min="0"
+                    step="1"
+                    inputMode="numeric"
+                    value={quantidadeUn}
+                    onChange={(e) => setQuantidadeUn(e.target.value)}
+                    placeholder="0"
+                    className="campo block w-full pr-10"
                   />
-                  <button
-                    type="button"
-                    className="btn-secundario shrink-0"
-                    onClick={() => setNovoFornecedor(null)}
-                  >
-                    Cancelar
-                  </button>
+                  <span className="pointer-events-none absolute top-2.5 right-4 text-sm text-texto-suave">un</span>
                 </div>
-              )}
-              {novoFornecedor !== null && (
-                <p className="mt-1 text-xs text-texto-suave">
-                  Será cadastrado ao confirmar a compra. Telefone e outros dados dá pra
-                  completar depois em Fornecedores.
+              </div>
+              {produtoSelecionado && (
+                <p className="mt-2 text-xs text-texto-suave">
+                  No sistema: <strong>{produtoSelecionado.estoqueUn} un</strong>
+                  {contagem !== null && (
+                    <>
+                      {" "}→ contado: <strong>{contagem} un</strong> → vai lançar{" "}
+                      <strong
+                        className={
+                          contagem - produtoSelecionado.estoqueUn < 0
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-emerald-600 dark:text-emerald-400"
+                        }
+                      >
+                        {contagem - produtoSelecionado.estoqueUn > 0 ? "+" : ""}
+                        {contagem - produtoSelecionado.estoqueUn} un
+                      </strong>
+                    </>
+                  )}
                 </p>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold">
+                  Quantidade ({tipoMovimento === "PERDA" ? "Saída" : "Entrada"})
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={quantidadeUn}
+                    onChange={(e) => setQuantidadeUn(e.target.value)}
+                    required
+                    placeholder="0"
+                    className="campo block w-full pr-12"
+                  />
+                  <span className="absolute right-4 top-2.5 text-sm text-texto-suave pointer-events-none">un</span>
+                </div>
+              </div>
+
+              {tipoMovimento === "COMPRA" && (
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold">Custo Total (R$)</label>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={custoTotal}
+                    onChange={(e) => setCustoTotal(e.target.value)}
+                    required
+                    placeholder="0,00"
+                    className="campo block w-full"
+                  />
+                </div>
               )}
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-semibold">
-                Quantidade ({tipoMovimento === "PERDA" ? "Saída" : "Entrada"})
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={quantidadeUn}
-                  onChange={(e) => setQuantidadeUn(e.target.value)}
-                  required
-                  placeholder="0"
-                  className="campo block w-full pr-12"
-                />
-                <span className="absolute right-4 top-2.5 text-sm text-texto-suave pointer-events-none">un</span>
-              </div>
-            </div>
-
-            {tipoMovimento === "COMPRA" && (
-              <div>
-                <label className="mb-1.5 block text-sm font-semibold">Custo Total (R$)</label>
-                <input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={custoTotal}
-                  onChange={(e) => setCustoTotal(e.target.value)}
-                  required
-                  placeholder="0,00"
-                  className="campo block w-full"
-                />
-              </div>
-            )}
-          </div>
-
           {tipoMovimento === "COMPRA" && (
-            <div>
-              <label className="mb-1.5 block text-sm font-semibold">Pagamento</label>
-              <div className="grid grid-cols-2 gap-1 rounded-xl bg-superficie-2 p-1">
-                {(["AVISTA", "PRAZO"] as const).map((op) => (
-                  <button
-                    key={op}
-                    type="button"
-                    onClick={() => setPagamento(op)}
-                    className={`rounded-lg py-2 text-sm font-bold transition ${
-                      pagamento === op ? "bg-superficie shadow-sm" : "text-texto-suave"
-                    }`}
-                  >
-                    {op === "AVISTA" ? "À vista" : "A prazo"}
-                  </button>
-                ))}
-              </div>
-              {pagamento === "PRAZO" && (
-                <div className="mt-3">
-                  <label className="mb-1.5 block text-sm font-semibold" htmlFor="vencimento-compra">
-                    Vencimento
-                  </label>
-                  <input
-                    id="vencimento-compra"
-                    type="date"
-                    required
-                    value={vencimento}
-                    onChange={(e) => setVencimento(e.target.value)}
-                    className="campo block w-full"
-                  />
-                  <p className="mt-1 text-xs text-texto-suave">
-                    Vai entrar em <strong>Financeiro → Contas a pagar</strong> com o valor total da compra.
-                  </p>
-                </div>
-              )}
-            </div>
+            <CamposPagamento
+              pagamento={pagamento}
+              setPagamento={setPagamento}
+              parcelas={parcelas}
+              setParcelas={setParcelas}
+              vencimento={vencimento}
+              setVencimento={setVencimento}
+              valorTotal={Number(custoTotal) || 0}
+            />
           )}
 
           {tipoMovimento === "COMPRA" && quantidadeUn && custoTotal && (
@@ -633,6 +896,28 @@ interface LinhaHistorico {
   /** Positivo = entrou no galpão, negativo = saiu. */
   quantidade: number;
   dePedido?: boolean;
+  /** Lançamento de compra — a linha abre a edição de fornecedor/pagamento. */
+  compra?: EstoqueMovimento;
+}
+
+/** "a prazo, 3x · 1 paga · vence 10/11/2026" a partir das contas da compra. */
+function resumoPrazo(m: EstoqueMovimento, contasPagar: ContaPagar[]): string {
+  const contas = idsDasContas(m)
+    .map((id) => contasPagar.find((c) => c.id === id))
+    .filter((c): c is ContaPagar => !!c);
+  if (contas.length === 0) return "a prazo";
+  const partes = ["a prazo" + (contas.length > 1 ? `, ${contas.length}x` : "")];
+  const pagas = contas.filter((c) => c.pago).length;
+  if (pagas === contas.length) {
+    partes.push("pago");
+  } else {
+    if (pagas > 0) partes.push(`${pagas} paga${pagas > 1 ? "s" : ""}`);
+    const proxima = contas
+      .filter((c) => !c.pago)
+      .sort((a, b) => a.vencimento.localeCompare(b.vencimento))[0];
+    partes.push(`vence ${dataBR(proxima.vencimento)}`);
+  }
+  return partes.join(" · ");
 }
 
 function ModalHistorico({
@@ -645,6 +930,7 @@ function ModalHistorico({
   aoFechar: () => void;
 }) {
   const { pedidoPorId, fornecedores, contasPagar } = useDados();
+  const [editandoCompra, setEditandoCompra] = useState<EstoqueMovimento | null>(null);
   const [de, setDe] = useState(inicioDoMes());
   const [ate, setAte] = useState(hojeISO());
 
@@ -674,14 +960,7 @@ function ModalHistorico({
           detalhe = f ? f.nome : "sem fornecedor";
           if (m.custoUn) detalhe += (detalhe ? " · " : "") + brl(m.custoUn) + "/un";
           if (m.pagamento === "AVISTA") detalhe += " · à vista";
-          if (m.pagamento === "PRAZO") {
-            const conta = m.contaPagarId
-              ? contasPagar.find((c) => c.id === m.contaPagarId)
-              : undefined;
-            detalhe += conta
-              ? ` · a prazo, ${conta.pago ? "pago" : `vence ${dataBR(conta.vencimento)}`}`
-              : " · a prazo";
-          }
+          if (m.pagamento === "PRAZO") detalhe += " · " + resumoPrazo(m, contasPagar);
         }
         resultado.push({
           chave: m.id,
@@ -689,8 +968,10 @@ function ModalHistorico({
           detalhe,
           data: m.data,
           obs: m.obs,
-          // AJUSTE é gravado com tipo "AJUSTE" mas sempre soma (ver handleSubmit).
+          // Ajustes antigos têm tipo "AJUSTE" e sempre somavam; os novos
+          // (por contagem) já vêm como ENTRADA ou SAIDA.
           quantidade: m.tipo === "SAIDA" ? -m.quantidadeUn : m.quantidadeUn,
+          compra: m.origem === "COMPRA" ? m : undefined,
         });
         continue;
       }
@@ -813,7 +1094,13 @@ function ModalHistorico({
               const entrada = l.quantidade > 0;
               const zerado = l.quantidade === 0;
               return (
-                <li key={l.chave} className="flex items-center gap-3 px-4 py-2.5">
+                <li
+                  key={l.chave}
+                  className={`flex items-center gap-3 px-4 py-2.5 ${
+                    l.compra ? "cursor-pointer transition hover:bg-superficie-2" : ""
+                  }`}
+                  onClick={l.compra ? () => setEditandoCompra(l.compra!) : undefined}
+                >
                   {zerado ? (
                     <span className="h-4 w-4 shrink-0" />
                   ) : entrada ? (
@@ -822,7 +1109,7 @@ function ModalHistorico({
                     <ArrowUp className="h-4 w-4 shrink-0 text-red-500" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">
+                    <p className="text-sm leading-snug font-semibold">
                       {l.rotulo}
                       {l.detalhe && (
                         <span className="ml-1 text-xs font-normal text-texto-suave">
@@ -853,10 +1140,184 @@ function ModalHistorico({
                     {entrada ? "+" : ""}
                     {l.quantidade} un
                   </span>
+                  {l.compra && <Pencil className="h-3.5 w-3.5 shrink-0 text-texto-suave" />}
                 </li>
               );
             })}
           </ul>
+        )}
+        {linhas.some((l) => l.compra) && (
+          <p className="-mt-2 text-center text-xs text-texto-suave">
+            Toque numa compra pra mudar o fornecedor ou a forma de pagamento.
+          </p>
+        )}
+      </div>
+
+      {editandoCompra && (
+        <ModalEditarCompra
+          movimento={editandoCompra}
+          aoFechar={() => setEditandoCompra(null)}
+        />
+      )}
+    </Modal>
+  );
+}
+
+/**
+ * Corrige fornecedor e forma de pagamento de uma compra já lançada.
+ * Quantidade e custo não mudam aqui (mexeriam no estoque e no custo médio).
+ * Se já tem parcela paga, só o fornecedor pode mudar — refazer as parcelas
+ * apagaria um pagamento já registrado.
+ */
+function ModalEditarCompra({
+  movimento,
+  aoFechar,
+}: {
+  movimento: EstoqueMovimento;
+  aoFechar: () => void;
+}) {
+  const {
+    fornecedores,
+    contasPagar,
+    salvarFornecedor,
+    salvarContaPagar,
+    removerContaPagar,
+    salvarMovimento,
+  } = useDados();
+
+  const contas = useMemo(
+    () =>
+      idsDasContas(movimento)
+        .map((id) => contasPagar.find((c) => c.id === id))
+        .filter((c): c is ContaPagar => !!c)
+        .sort((a, b) => a.vencimento.localeCompare(b.vencimento)),
+    [movimento, contasPagar],
+  );
+  const algumaPaga = contas.some((c) => c.pago);
+
+  const inicial = {
+    pagamento: (movimento.pagamento ?? "AVISTA") as FormaCompra,
+    parcelas: Math.max(1, contas.length),
+    vencimento: contas[0]?.vencimento ?? somarDias(movimento.data.slice(0, 10), 30),
+  };
+
+  const [fornecedorId, setFornecedorId] = useState(movimento.fornecedorId ?? "");
+  const [novoNome, setNovoNome] = useState<string | null>(null);
+  const [pagamento, setPagamento] = useState<FormaCompra>(inicial.pagamento);
+  const [parcelas, setParcelas] = useState(inicial.parcelas);
+  const [vencimento, setVencimento] = useState(inicial.vencimento);
+  const [salvando, setSalvando] = useState(false);
+
+  const valorTotal = movimento.custoUn
+    ? Math.round(movimento.custoUn * movimento.quantidadeUn * 100) / 100
+    : 0;
+
+  async function salvar() {
+    setSalvando(true);
+    try {
+      const fornecedor = await resolverFornecedor(
+        fornecedores,
+        salvarFornecedor,
+        fornecedorId,
+        novoNome,
+      );
+
+      const mudouPagamento =
+        pagamento !== inicial.pagamento ||
+        (pagamento === "PRAZO" &&
+          (parcelas !== inicial.parcelas || vencimento !== inicial.vencimento));
+
+      let ids = contas.map((c) => c.id);
+      if (mudouPagamento && !algumaPaga) {
+        // Refaz as parcelas do zero conforme a escolha nova.
+        for (const id of ids) await removerContaPagar(id);
+        ids = [];
+        if (pagamento === "PRAZO" && valorTotal > 0) {
+          ids = await criarContasPrazo(salvarContaPagar, {
+            valorTotal,
+            parcelas,
+            primeiroVencimento: vencimento,
+            descricao: `Compra: ${movimento.quantidadeUn} un de ${movimento.produtoNome}`,
+            fornecedor,
+            obs: movimento.obs,
+          });
+        }
+      } else {
+        // Só o fornecedor mudou: atualiza nas contas que já existem.
+        for (const c of contas) {
+          await salvarContaPagar({
+            ...c,
+            fornecedorId: fornecedor.id,
+            fornecedorNome: fornecedor.nome,
+          });
+        }
+      }
+
+      await salvarMovimento({
+        ...movimento,
+        fornecedorId: fornecedor.id,
+        pagamento: algumaPaga ? movimento.pagamento : pagamento,
+        contaPagarId: undefined,
+        contaPagarIds: ids.length > 0 ? ids : undefined,
+      });
+      aoFechar();
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <Modal
+      aberto
+      aoFechar={() => !salvando && aoFechar()}
+      titulo="Editar compra"
+      rodape={
+        <>
+          <button className="btn-secundario" onClick={aoFechar} disabled={salvando}>
+            Cancelar
+          </button>
+          <button className="btn-primario" onClick={salvar} disabled={salvando}>
+            {salvando ? "Salvando..." : "Salvar"}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-5">
+        <p className="text-sm text-texto-suave">
+          {movimento.quantidadeUn} un de <strong className="text-texto">{movimento.produtoNome}</strong>{" "}
+          em {dataBR(movimento.data)}
+          {valorTotal > 0 && ` · total ${brl(valorTotal)}`}
+        </p>
+
+        <CampoFornecedor
+          fornecedores={fornecedores}
+          fornecedorId={fornecedorId}
+          novoNome={novoNome}
+          aoMudar={(id, nome) => {
+            setFornecedorId(id);
+            setNovoNome(nome);
+          }}
+        />
+
+        {valorTotal > 0 ? (
+          <CamposPagamento
+            pagamento={pagamento}
+            setPagamento={setPagamento}
+            parcelas={parcelas}
+            setParcelas={setParcelas}
+            vencimento={vencimento}
+            setVencimento={setVencimento}
+            valorTotal={valorTotal}
+            bloqueado={
+              algumaPaga
+                ? "Já tem parcela paga no Financeiro — a forma de pagamento não pode mais mudar por aqui."
+                : undefined
+            }
+          />
+        ) : (
+          <p className="text-xs text-texto-suave">
+            Essa compra foi lançada sem custo, então não dá pra gerar conta a pagar.
+          </p>
         )}
       </div>
     </Modal>
