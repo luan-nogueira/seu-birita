@@ -48,6 +48,7 @@ function EstoquePageInterno() {
     fornecedores,
     salvarMovimento,
     salvarProduto,
+    salvarFornecedor,
     produtoPorId,
     pedidoPorId,
     removerMovimento,
@@ -92,6 +93,8 @@ function EstoquePageInterno() {
   const [tipoMovimento, setTipoMovimento] = useState<EstoqueOrigem>("COMPRA");
   const [produtoId, setProdutoId] = useState("");
   const [fornecedorId, setFornecedorId] = useState("");
+  // Cadastro rápido de fornecedor direto na compra, só com o nome.
+  const [novoFornecedor, setNovoFornecedor] = useState<string | null>(null);
   const [quantidadeUn, setQuantidadeUn] = useState("");
   const [custoTotal, setCustoTotal] = useState("");
   const [obs, setObs] = useState("");
@@ -141,6 +144,25 @@ function EstoquePageInterno() {
 
       const isEntrada = tipoEntrada === "ENTRADA" || (tipoEntrada === "AJUSTE" && tipoMovimento !== "PERDA");
 
+      let fornecedorFinal = fornecedorId;
+      const nomeNovo = novoFornecedor?.trim();
+      if (tipoMovimento === "COMPRA" && nomeNovo) {
+        const existente = fornecedores.find(
+          (f) => normalizar(f.nome) === normalizar(nomeNovo),
+        );
+        if (existente) {
+          fornecedorFinal = existente.id;
+        } else {
+          fornecedorFinal = novoId();
+          await salvarFornecedor({
+            id: fornecedorFinal,
+            nome: nomeNovo,
+            ativo: true,
+            criadoEm: new Date().toISOString(),
+          });
+        }
+      }
+
       let custoUn: number | undefined = undefined;
       if (tipoMovimento === "COMPRA" && custoTotal) {
         custoUn = Number(custoTotal) / qtd;
@@ -154,7 +176,7 @@ function EstoquePageInterno() {
         origem: tipoMovimento,
         quantidadeUn: qtd,
         custoUn,
-        fornecedorId: fornecedorId || undefined,
+        fornecedorId: fornecedorFinal || undefined,
         // Data local (não toISOString) — depois das 21h no fuso do Brasil,
         // o timestamp UTC já vira o dia seguinte e a movimentação aparecia
         // com a data errada no histórico.
@@ -198,6 +220,7 @@ function EstoquePageInterno() {
       setProdutoId("");
       setBuscaProduto("");
       setFornecedorId("");
+      setNovoFornecedor(null);
       setQuantidadeUn("");
       setCustoTotal("");
       setObs("");
@@ -408,21 +431,57 @@ function EstoquePageInterno() {
             )}
           </div>
 
-          {tipoMovimento === "COMPRA" && fornecedores.length > 0 && (
+          {tipoMovimento === "COMPRA" && (
             <div>
               <label className="mb-1.5 block text-sm font-semibold">Fornecedor (Opcional)</label>
-              <select
-                value={fornecedorId}
-                onChange={(e) => setFornecedorId(e.target.value)}
-                className="campo block w-full"
-              >
-                <option value="">Nenhum fornecedor vinculado</option>
-                {fornecedores.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.nome}
-                  </option>
-                ))}
-              </select>
+              {novoFornecedor === null ? (
+                <select
+                  value={fornecedorId}
+                  onChange={(e) => {
+                    if (e.target.value === "__novo__") {
+                      setFornecedorId("");
+                      setNovoFornecedor("");
+                    } else {
+                      setFornecedorId(e.target.value);
+                    }
+                  }}
+                  className="campo block w-full"
+                >
+                  <option value="">Nenhum fornecedor vinculado</option>
+                  {fornecedores
+                    .filter((f) => f.ativo !== false)
+                    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+                    .map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.nome}
+                      </option>
+                    ))}
+                  <option value="__novo__">+ Cadastrar novo fornecedor</option>
+                </select>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    autoFocus
+                    className="campo min-w-0 flex-1"
+                    placeholder="Nome do fornecedor"
+                    value={novoFornecedor}
+                    onChange={(e) => setNovoFornecedor(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="btn-secundario shrink-0"
+                    onClick={() => setNovoFornecedor(null)}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              )}
+              {novoFornecedor !== null && (
+                <p className="mt-1 text-xs text-texto-suave">
+                  Será cadastrado ao confirmar a compra. Telefone e outros dados dá pra
+                  completar depois em Fornecedores.
+                </p>
+              )}
             </div>
           )}
 
