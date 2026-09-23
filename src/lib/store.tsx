@@ -129,6 +129,43 @@ function useColecaoProtegida<T extends { id: string }>(
   return itens;
 }
 
+const salvarEm =
+  <T extends { id: string }>(nome: Parameters<typeof colecao>[0]) =>
+  (item: T) =>
+    colecao<T>(nome).salvar(item);
+const removerDe =
+  (nome: Parameters<typeof colecao>[0]) => (id: string) =>
+    colecao(nome).remover(id);
+
+/**
+ * Funções de gravar/apagar criadas uma vez só, fora do Provider. Antes
+ * eram recriadas a cada mudança de dados — e como o salvamento automático
+ * do pedido depende de salvarPedido, cada gravação gerava uma função nova,
+ * que disparava outra gravação 700ms depois, em loop infinito enquanto o
+ * pedido estivesse aberto. Isso deixava todos os aparelhos redesenhando a
+ * tela sem parar (impressão e navegação lentas).
+ */
+const ACOES = {
+  salvarProduto: salvarEm<Produto>("produtos"),
+  removerProduto: removerDe("produtos"),
+  salvarCliente: salvarEm<Cliente>("clientes"),
+  removerCliente: removerDe("clientes"),
+  salvarFornecedor: salvarEm<Fornecedor>("fornecedores"),
+  removerFornecedor: removerDe("fornecedores"),
+  salvarPedido: salvarEm<Pedido>("pedidos"),
+  removerPedido: removerDe("pedidos"),
+  salvarPagamento: salvarEm<Pagamento>("pagamentos"),
+  removerPagamento: removerDe("pagamentos"),
+  salvarMovimento: salvarEm<EstoqueMovimento>("movimentos"),
+  removerMovimento: removerDe("movimentos"),
+  salvarPedidoCliente: salvarEm<PedidoCliente>("pedidosClientes"),
+  removerPedidoCliente: removerDe("pedidosClientes"),
+  salvarContaPagar: salvarEm<ContaPagar>("contasPagar"),
+  removerContaPagar: removerDe("contasPagar"),
+  salvarUsuario: salvarEm<Usuario>("usuarios"),
+  removerUsuario: removerDe("usuarios"),
+};
+
 export function DadosProvider({ children }: { children: React.ReactNode }) {
   const [prontas, setProntas] = useState(0);
   const marcarPronta = useCallback(() => setProntas((n) => n + 1), []);
@@ -165,14 +202,6 @@ export function DadosProvider({ children }: { children: React.ReactNode }) {
       b.dataEvento.localeCompare(a.dataEvento) || b.numero - a.numero,
     );
 
-    const salvarEm =
-      <T extends { id: string }>(nome: Parameters<typeof colecao>[0]) =>
-      (item: T) =>
-        colecao<T>(nome).salvar(item);
-    const removerDe =
-      (nome: Parameters<typeof colecao>[0]) => (id: string) =>
-        colecao(nome).remover(id);
-
     return {
       produtos: produtosOrdenados,
       clientes: clientesOrdenados,
@@ -194,24 +223,7 @@ export function DadosProvider({ children }: { children: React.ReactNode }) {
       carregando: authCarregando || prontas < 9,
       modoDemonstracao,
 
-      salvarProduto: salvarEm<Produto>("produtos"),
-      removerProduto: removerDe("produtos"),
-      salvarCliente: salvarEm<Cliente>("clientes"),
-      removerCliente: removerDe("clientes"),
-      salvarFornecedor: salvarEm<Fornecedor>("fornecedores"),
-      removerFornecedor: removerDe("fornecedores"),
-      salvarPedido: salvarEm<Pedido>("pedidos"),
-      removerPedido: removerDe("pedidos"),
-      salvarPagamento: salvarEm<Pagamento>("pagamentos"),
-      removerPagamento: removerDe("pagamentos"),
-      salvarMovimento: salvarEm<EstoqueMovimento>("movimentos"),
-      removerMovimento: removerDe("movimentos"),
-      salvarPedidoCliente: salvarEm<PedidoCliente>("pedidosClientes"),
-      removerPedidoCliente: removerDe("pedidosClientes"),
-      salvarContaPagar: salvarEm<ContaPagar>("contasPagar"),
-      removerContaPagar: removerDe("contasPagar"),
-      salvarUsuario: salvarEm<Usuario>("usuarios"),
-      removerUsuario: removerDe("usuarios"),
+      ...ACOES,
 
       proximoNumeroPedido: () =>
         pedidos.reduce((max, p) => Math.max(max, p.numero || 0), 0) + 1,

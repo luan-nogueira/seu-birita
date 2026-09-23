@@ -6,8 +6,8 @@ self.addEventListener("activate", (e) => {
   e.waitUntil(self.clients.claim());
 });
 
-self.addEventListener("fetch", (e) => {
-  // Passa direto pra rede para sempre ter a versão mais recente
-  // Isso garante que se houver atualização, o usuário recebe de imediato.
-  e.respondWith(fetch(e.request));
-});
+// Sem handler de "fetch" de propósito: o antigo só repassava tudo pra rede
+// (fetch(e.request)), o que não cacheava nada e ainda obrigava o navegador
+// a acordar o service worker a cada requisição — deixando navegação e
+// carregamento mais lentos, principalmente no celular. Sem o handler, as
+// requisições vão direto pra rede e o app continua instalável.
