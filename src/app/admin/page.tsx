@@ -36,12 +36,19 @@ export default function InicioPage() {
     .filter((p) => p.status !== "RASCUNHO")
     .reduce((soma, p) => soma + Math.max(0, calcularTotais(p).saldoAberto), 0);
 
-  const [mesFiltro, setMesFiltro] = useState(() => new Date().toISOString().slice(0, 7));
+  // Data local (hojeISO), não toISOString — senão depois das 21h o filtro
+  // já pulava pro dia/mês seguinte.
+  const [dataInicial, setDataInicial] = useState(() => hojeISO().slice(0, 8) + "01");
+  const [dataFinal, setDataFinal] = useState(hojeISO);
 
   // Rascunho ainda não é uma venda de verdade — não deve entrar no
   // faturamento/lucro do mês, só depois de sair do estágio de rascunho.
   const pedidosDoMes = ativos.filter(
-    (p) => p.status !== "RASCUNHO" && p.dataEvento.startsWith(mesFiltro),
+    (p) => {
+      if (p.status === "RASCUNHO") return false;
+      const d = p.dataEvento.slice(0, 10);
+      return d >= dataInicial && d <= dataFinal;
+    },
   );
   const faturadoMes = pedidosDoMes.reduce(
     (soma, p) => soma + calcularTotais(p).valorFinal,
@@ -121,15 +128,25 @@ export default function InicioPage() {
               />
               <Cartao
                 Icone={TrendingUp}
-                rotulo="Faturado no mês"
+                rotulo="Faturado no período"
                 valor={brl(faturadoMes)}
                 detalhe={
-                  <input
-                    type="month"
-                    value={mesFiltro}
-                    onChange={(e) => setMesFiltro(e.target.value)}
-                    className="bg-transparent outline-none cursor-pointer w-full text-texto-suave"
-                  />
+                  <div className="mt-1 flex flex-col gap-1">
+                    <input
+                      type="date"
+                      aria-label="Data inicial"
+                      value={dataInicial}
+                      onChange={(e) => setDataInicial(e.target.value)}
+                      className="campo h-auto min-h-0 px-1.5 py-1 text-[11px]"
+                    />
+                    <input
+                      type="date"
+                      aria-label="Data final"
+                      value={dataFinal}
+                      onChange={(e) => setDataFinal(e.target.value)}
+                      className="campo h-auto min-h-0 px-1.5 py-1 text-[11px]"
+                    />
+                  </div>
                 }
               />
               <Cartao
@@ -150,7 +167,7 @@ export default function InicioPage() {
             <>
               <Cartao
                 Icone={CalendarDays}
-                rotulo="Eventos no mês"
+                rotulo="Eventos no período"
                 valor={String(pedidosDoMes.length)}
                 detalhe="pedidos no período"
               />
