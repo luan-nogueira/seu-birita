@@ -38,10 +38,17 @@ export function paraCaixas(totalUn: number, unPorCaixa: number) {
 }
 
 export function entregueUn(item: PedidoItem): number {
-  return item.entregas.reduce(
-    (soma, r) => soma + paraUnidades(r.cx, r.un, item.unPorCaixa),
-    0,
+  return (
+    item.entregas.reduce(
+      (soma, r) => soma + paraUnidades(r.cx, r.un, item.unPorCaixa),
+      0,
+    ) + sobraUn(item)
   );
+}
+
+/** Sobra importada de um evento anterior (já estava no cliente). */
+export function sobraUn(item: PedidoItem): number {
+  return paraUnidades(item.sobraCx ?? 0, item.sobraUn ?? 0, item.unPorCaixa);
 }
 
 export function devolvidoUn(item: PedidoItem, tipo: PedidoTipo): number {

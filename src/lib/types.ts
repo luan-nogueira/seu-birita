@@ -98,6 +98,13 @@ export interface PedidoItem {
   entregas: Remessa[];
   devolucaoCx: number;
   devolucaoUn: number;
+  /**
+   * Sobra de um evento anterior que já estava no cliente (importada pelo
+   * "Importar devolução"). Conta como entregue pro consumo e pro valor, mas
+   * não sai do galpão na carga — por isso fica fora das entregas e do romaneio.
+   */
+  sobraCx?: number;
+  sobraUn?: number;
 }
 
 export interface Pedido {

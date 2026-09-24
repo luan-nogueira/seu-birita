@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, Suspense, useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClipboardList, Plus, Search } from "lucide-react";
@@ -237,34 +237,12 @@ function ModalNovoPedido({
   const [titulo, setTitulo] = useState("");
   const [dataEvento, setDataEvento] = useState(hojeISO());
   const [criando, setCriando] = useState(false);
-  const [puxarSobras, setPuxarSobras] = useState(false);
 
   // Só informativo agora — cada pedido já soma certinho no "Em aberto por
   // cliente" (Financeiro) sozinho. Puxar esse valor pra dentro de um pedido
   // novo (como era antes) inflava o total daquele pedido e, se o antigo
   // fosse pago à parte, ficava uma dívida fantasma presa no novo.
   const pendencia = clienteId ? pendenciaDoCliente(clienteId) : 0;
-
-  useEffect(() => {
-    setPuxarSobras(false);
-  }, [clienteId]);
-
-  const ultimoPedidoConsignacao = useMemo(() => {
-    if (!clienteId) return null;
-    const pedidosCliente = pedidos
-      .filter((p) => p.clienteId === clienteId && p.tipo === "CONSIGNACAO" && p.status !== "CANCELADO" && p.status !== "RASCUNHO")
-      .sort((a, b) => b.dataEvento.localeCompare(a.dataEvento) || b.criadoEm.localeCompare(a.criadoEm));
-    
-    const ultimo = pedidosCliente[0];
-    // Sobras já puxadas por outro pedido (que ainda existe) não aparecem de novo.
-    if (ultimo && pedidos.some((p) => p.sobrasDePedidoId === ultimo.id)) return null;
-    return ultimo || null;
-  }, [clienteId, pedidos]);
-
-  const temSobras = useMemo(() => {
-    if (!ultimoPedidoConsignacao) return false;
-    return ultimoPedidoConsignacao.itens.some(i => i.devolucaoCx > 0 || i.devolucaoUn > 0);
-  }, [ultimoPedidoConsignacao]);
 
   async function criar() {
     if (!podeCriar) return;
@@ -297,24 +275,6 @@ function ModalNovoPedido({
     const id = novoId();
     const numero = proximoNumeroPedido();
 
-    const itensIniciais = [];
-    if (puxarSobras && ultimoPedidoConsignacao) {
-      for (const itemAntigo of ultimoPedidoConsignacao.itens) {
-        if (itemAntigo.devolucaoCx > 0 || itemAntigo.devolucaoUn > 0) {
-          itensIniciais.push({
-            produtoId: itemAntigo.produtoId,
-            nome: itemAntigo.nome,
-            unPorCaixa: itemAntigo.unPorCaixa,
-            precoUn: itemAntigo.precoUn,
-            custoUn: itemAntigo.custoUn,
-            entregas: [{ numero: 1, cx: itemAntigo.devolucaoCx, un: itemAntigo.devolucaoUn }],
-            devolucaoCx: 0,
-            devolucaoUn: 0,
-          });
-        }
-      }
-    }
-
     await salvarPedido({
       id,
       numero,
@@ -326,9 +286,7 @@ function ModalNovoPedido({
       status: "RASCUNHO",
       pendenciaAnterior: 0,
       desconto: 0,
-      itens: itensIniciais,
-      sobrasDePedidoId:
-        puxarSobras && ultimoPedidoConsignacao ? ultimoPedidoConsignacao.id : undefined,
+      itens: [],
       valorPedido: 0,
       valorFinal: 0,
       valorPago: 0,
@@ -483,20 +441,6 @@ function ModalNovoPedido({
               </span>
             </span>
           </div>
-        )}
-
-        {temSobras && (
-          <label className="flex items-center gap-2 cursor-pointer mt-1">
-            <input
-              type="checkbox"
-              className="h-5 w-5 accent-[var(--acento)]"
-              checked={puxarSobras}
-              onChange={(e) => setPuxarSobras(e.target.checked)}
-            />
-            <span className="text-sm font-semibold">
-              Começar com as devoluções do último evento
-            </span>
-          </label>
         )}
       </div>
     </Modal>

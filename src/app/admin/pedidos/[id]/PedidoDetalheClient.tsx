@@ -10,6 +10,7 @@ import {
   ClipboardList,
   CloudUpload,
   FileText,
+  History,
   Layers,
   Plus,
   Search,
@@ -29,6 +30,7 @@ import {
   devolvidoUn,
   efeitoEstoque,
   entregueUn,
+  sobraUn,
   novoItem,
   precoDaTabela,
   saldoUn,
@@ -90,6 +92,7 @@ function PedidoPageInterno() {
     salvarPedido,
     removerPedido,
     pagamentos,
+    pedidos,
     removerPagamento,
     produtoPorId,
     salvarProduto,
@@ -334,6 +337,11 @@ function PedidoPageInterno() {
                   <span className="hidden sm:inline">Nova remessa</span>
                 </button>
               )}
+              <ImportarDevolucao
+                pedido={pedido}
+                pedidos={pedidos}
+                aoMudar={atualizar}
+              />
               <SeletorProdutos
                 pedido={pedido}
                 aoAdicionar={(itens) =>
@@ -725,6 +733,17 @@ function CartaoItem({
       </div>
 
       <div className="mt-3 space-y-2">
+        {(item.sobraCx !== undefined || item.sobraUn !== undefined) && (
+          <LinhaQtd
+            rotulo="Sobra ant."
+            nomeItem={item.nome}
+            cx={item.sobraCx ?? 0}
+            un={item.sobraUn ?? 0}
+            unPorCaixa={item.unPorCaixa}
+            aoMudarCx={(v) => aoMudar({ sobraCx: v })}
+            aoMudarUn={(v) => aoMudar({ sobraUn: v })}
+          />
+        )}
         {item.entregas.map((e, i) => (
           <LinhaQtd
             key={i}
@@ -879,7 +898,11 @@ function TabelaItens({
 }) {
   const tipo = consignacao ? "CONSIGNACAO" : "VENDA_DIRETA";
   const colunasRemessa = Array.from({ length: remessas }, (_, i) => i);
-  const totalColunas = 6 + 3 * remessas + (consignacao ? 3 : 0);
+  // Coluna da sobra importada só aparece quando algum item tem sobra.
+  const temSobra = categorias.some(([, grupo]) =>
+    grupo.some(({ item }) => item.sobraCx !== undefined || item.sobraUn !== undefined),
+  );
+  const totalColunas = 6 + 3 * remessas + (consignacao ? 3 : 0) + (temSobra ? 3 : 0);
 
   return (
     <div className="card overflow-x-auto">
@@ -887,6 +910,15 @@ function TabelaItens({
         <thead>
           <tr className="border-b border-borda bg-superficie-2 text-[11px] uppercase">
             <th className="px-3 py-2 text-left font-bold">Produto</th>
+            {temSobra && (
+              <th
+                colSpan={3}
+                className="border-l border-borda px-3 py-2 text-center font-bold"
+                title="Sobra de um evento anterior que já estava no cliente — não entra no romaneio"
+              >
+                Sobra anterior
+              </th>
+            )}
             {colunasRemessa.map((i) => (
               <th
                 key={i}
@@ -914,6 +946,13 @@ function TabelaItens({
           </tr>
           <tr className="border-b border-borda bg-superficie-2 text-[10px] text-texto-suave uppercase">
             <th />
+            {temSobra && (
+              <>
+                <th className="border-l border-borda px-2 py-1">cx</th>
+                <th className="px-2 py-1">un</th>
+                <th className="px-2 py-1">total</th>
+              </>
+            )}
             {colunasRemessa.map((i) => (
               <Fragment key={i}>
                 <th className="border-l border-borda px-2 py-1">cx</th>
@@ -965,6 +1004,36 @@ function TabelaItens({
                     </p>
                   )}
                 </td>
+
+                {temSobra &&
+                  (item.sobraCx !== undefined || item.sobraUn !== undefined ? (
+                    <>
+                      <td className="w-20 border-l border-borda px-1.5 py-1.5">
+                        <CampoQtd
+                          valor={item.sobraCx ?? 0}
+                          desabilitado={item.unPorCaixa <= 1}
+                          rotulo={`Sobra anterior de ${item.nome} em caixas`}
+                          aoMudar={(v) => aoMudarItem(indice, { sobraCx: v })}
+                        />
+                      </td>
+                      <td className="w-20 px-1.5 py-1.5">
+                        <CampoQtd
+                          valor={item.sobraUn ?? 0}
+                          rotulo={`Sobra anterior de ${item.nome} em unidades`}
+                          aoMudar={(v) => aoMudarItem(indice, { sobraUn: v })}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5 text-right text-texto-suave tabular-nums">
+                        {sobraUn(item) || "—"}
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="border-l border-borda" />
+                      <td />
+                      <td />
+                    </>
+                  ))}
 
                 {colunasRemessa.map((r) => {
                   const entrega = item.entregas[r] ?? {
@@ -1073,6 +1142,233 @@ function TabelaItens({
         ))}
       </table>
     </div>
+  );
+}
+
+/* ----------------------- Importar devolução anterior ---------------------- */
+
+function temDevolucao(p: Pedido) {
+  return p.itens.some((i) => (i.devolucaoCx || 0) > 0 || (i.devolucaoUn || 0) > 0);
+}
+
+function qtdTexto(cx: number, un: number, unPorCaixa: number) {
+  if (unPorCaixa <= 1) return `${cx + un} un`;
+  return [cx > 0 && `${cx} cx`, un > 0 && `${un} un`].filter(Boolean).join(" + ") || "0";
+}
+
+/**
+ * Traz a devolução de um evento anterior do mesmo cliente como "sobra" dos
+ * itens deste pedido. A sobra já está no cliente, então não entra nas
+ * entregas nem no romaneio de carga — conta só pro consumo e pro valor.
+ */
+function ImportarDevolucao({
+  pedido,
+  pedidos,
+  aoMudar,
+}: {
+  pedido: Pedido;
+  pedidos: Pedido[];
+  aoMudar: (m: Partial<Pedido>) => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [escolhidoId, setEscolhidoId] = useState("");
+  const [desfazendo, setDesfazendo] = useState(false);
+
+  const candidatos = useMemo(
+    () =>
+      pedidos
+        .filter(
+          (p) =>
+            p.id !== pedido.id &&
+            p.clienteId === pedido.clienteId &&
+            p.tipo === "CONSIGNACAO" &&
+            p.status !== "CANCELADO" &&
+            p.status !== "RASCUNHO" &&
+            temDevolucao(p),
+        )
+        .sort(
+          (a, b) =>
+            b.dataEvento.localeCompare(a.dataEvento) || b.criadoEm.localeCompare(a.criadoEm),
+        ),
+    [pedidos, pedido.id, pedido.clienteId],
+  );
+
+  const importadoDe = pedido.sobrasDePedidoId
+    ? pedidos.find((p) => p.id === pedido.sobrasDePedidoId)
+    : undefined;
+  const escolhido = candidatos.find((p) => p.id === escolhidoId);
+  const numero = (p: Pedido) => `#${String(p.numero).padStart(3, "0")}`;
+
+  if (!pedido.sobrasDePedidoId && candidatos.length === 0) return null;
+
+  function importar() {
+    if (!escolhido) return;
+    const itens = [...pedido.itens];
+    for (const antigo of escolhido.itens) {
+      const cx = antigo.devolucaoCx || 0;
+      const un = antigo.devolucaoUn || 0;
+      if (cx <= 0 && un <= 0) continue;
+      const i = itens.findIndex((x) => x.produtoId === antigo.produtoId);
+      if (i >= 0) {
+        itens[i] = {
+          ...itens[i],
+          sobraCx: (itens[i].sobraCx ?? 0) + cx,
+          sobraUn: (itens[i].sobraUn ?? 0) + un,
+        };
+      } else {
+        itens.push({
+          produtoId: antigo.produtoId,
+          nome: antigo.nome,
+          unPorCaixa: antigo.unPorCaixa,
+          precoUn: antigo.precoUn,
+          custoUn: antigo.custoUn,
+          entregas: [{ numero: 1, cx: 0, un: 0 }],
+          devolucaoCx: 0,
+          devolucaoUn: 0,
+          sobraCx: cx,
+          sobraUn: un,
+        });
+      }
+    }
+    aoMudar({ itens, sobrasDePedidoId: escolhido.id });
+    setAberto(false);
+    setEscolhidoId("");
+  }
+
+  function desfazer() {
+    // Tira a sobra de todos os itens; os que só existiam por causa dela
+    // (sem entrega e sem devolução lançadas) saem do pedido.
+    const itens = pedido.itens
+      .map((i) => ({ ...i, sobraCx: undefined, sobraUn: undefined }))
+      .filter(
+        (i, idx) =>
+          (pedido.itens[idx].sobraCx === undefined && pedido.itens[idx].sobraUn === undefined) ||
+          entregueUn(i) > 0 ||
+          (i.devolucaoCx || 0) > 0 ||
+          (i.devolucaoUn || 0) > 0,
+      );
+    aoMudar({ itens, sobrasDePedidoId: undefined });
+    setDesfazendo(false);
+    setAberto(false);
+  }
+
+  return (
+    <>
+      <button className="btn-secundario" onClick={() => setAberto(true)}>
+        <History className="h-4 w-4" />
+        <span className="hidden sm:inline">
+          {pedido.sobrasDePedidoId ? "Devolução importada" : "Importar devolução"}
+        </span>
+      </button>
+
+      <Modal
+        aberto={aberto}
+        aoFechar={() => setAberto(false)}
+        titulo="Importar devolução de um evento"
+        rodape={
+          pedido.sobrasDePedidoId ? (
+            <>
+              <button className="btn-secundario" onClick={() => setAberto(false)}>
+                Fechar
+              </button>
+              {desfazendo ? (
+                <button className="btn-perigo" onClick={desfazer}>
+                  Confirmar: desfazer
+                </button>
+              ) : (
+                <button className="btn-secundario" onClick={() => setDesfazendo(true)}>
+                  Desfazer importação
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <button className="btn-secundario" onClick={() => setAberto(false)}>
+                Cancelar
+              </button>
+              <button className="btn-primario" onClick={importar} disabled={!escolhido}>
+                Importar
+              </button>
+            </>
+          )
+        }
+      >
+        {pedido.sobrasDePedidoId ? (
+          <div className="space-y-2 text-sm text-texto-suave">
+            <p>
+              Este pedido já tem a devolução do{" "}
+              <strong className="text-texto">
+                {importadoDe
+                  ? `pedido ${numero(importadoDe)} (${dataBR(importadoDe.dataEvento)})`
+                  : "evento anterior"}
+              </strong>
+              . Ela aparece nos itens como <strong className="text-texto">Sobra anterior</strong>.
+            </p>
+            <p>
+              Desfazer tira a sobra de todos os itens (os que só estavam aqui por causa dela
+              saem do pedido).
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-sm text-texto-suave">
+              O que sobrou de um evento anterior e ficou no cliente entra como{" "}
+              <strong className="text-texto">Sobra anterior</strong>: conta no consumo e no
+              valor, mas não aparece no romaneio de carga.
+            </p>
+            <ul className="space-y-2">
+              {candidatos.map((c) => {
+                const usadoPor = pedidos.find(
+                  (p) => p.id !== pedido.id && p.sobrasDePedidoId === c.id,
+                );
+                const itensDev = c.itens.filter(
+                  (i) => (i.devolucaoCx || 0) > 0 || (i.devolucaoUn || 0) > 0,
+                ).length;
+                const selecionado = escolhidoId === c.id;
+                return (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      disabled={!!usadoPor}
+                      onClick={() => setEscolhidoId(c.id)}
+                      className={`w-full rounded-xl border px-3 py-2.5 text-left transition disabled:opacity-50 ${
+                        selecionado
+                          ? "border-acento bg-acento/10"
+                          : "border-borda hover:bg-superficie-2"
+                      }`}
+                    >
+                      <p className="text-sm font-semibold">
+                        Pedido {numero(c)} · {dataBR(c.dataEvento)}
+                        {c.titulo && ` · ${c.titulo}`}
+                      </p>
+                      <p className="text-xs text-texto-suave">
+                        {usadoPor
+                          ? `Já importada no pedido ${numero(usadoPor)}`
+                          : `${itensDev} ${itensDev === 1 ? "produto devolvido" : "produtos devolvidos"}`}
+                      </p>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            {escolhido && (
+              <ul className="divide-y divide-borda rounded-xl border border-borda text-sm">
+                {escolhido.itens
+                  .filter((i) => (i.devolucaoCx || 0) > 0 || (i.devolucaoUn || 0) > 0)
+                  .map((i) => (
+                    <li key={i.produtoId} className="flex justify-between gap-3 px-3 py-1.5">
+                      <span className="min-w-0 truncate">{i.nome}</span>
+                      <span className="shrink-0 font-semibold tabular-nums">
+                        {qtdTexto(i.devolucaoCx || 0, i.devolucaoUn || 0, i.unPorCaixa)}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </Modal>
+    </>
   );
 }
 
