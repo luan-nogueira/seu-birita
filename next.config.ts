@@ -7,7 +7,10 @@ const nextConfig: NextConfig = {
   // uma página nova (ex: Relatório/Romaneio), o Next percebe que o arquivo
   // da versão antiga não existe mais no servidor e recarrega a página
   // sozinho, em vez de simplesmente não fazer nada.
-  deploymentId: process.env.VERCEL_GIT_COMMIT_SHA,
+  // VERCEL_DEPLOYMENT_ID existe em todo deploy da Vercel; o COMMIT_SHA só
+  // quando o deploy vem do Git — e aqui publicamos pela CLI, então sozinho
+  // ele ficava vazio e a proteção nunca ligava.
+  deploymentId: process.env.VERCEL_DEPLOYMENT_ID || process.env.VERCEL_GIT_COMMIT_SHA,
   images: {
     remotePatterns: [
       // Cloudinary: novo host das fotos de produto.
