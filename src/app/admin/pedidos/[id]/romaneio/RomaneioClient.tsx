@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 
 import Link from "next/link";
+import { BotaoEnviarPdf, BotaoVoltar } from "@/components/AcoesFolha";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Printer } from "lucide-react";
 import { Logo } from "@/components/Logo";
@@ -83,29 +84,31 @@ export default function RomaneioPage() {
     <div className="min-h-dvh bg-neutral-200 print:bg-white">
       {/* Barra de ações — não sai no papel */}
       <div className="nao-imprimir sticky top-0 z-10 flex items-center gap-2 border-b border-black/10 bg-barra px-4 py-3 text-barra-texto">
-        <Link
-          href={`/admin/pedidos/${pedido.id}`}
-          className="grid h-9 w-9 place-items-center rounded-lg transition hover:bg-white/10"
-          aria-label="Voltar ao pedido"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
+        <BotaoVoltar href={`/admin/pedidos/${pedido.id}`} rotulo="Voltar ao pedido" />
         <p className="min-w-0 flex-1 truncate text-sm font-semibold">
           Romaneio #{String(pedido.numero).padStart(3, "0")} — {pedido.clienteNome}
         </p>
-        <button className="btn-primario" onClick={() => window.print()}>
+        <button
+          className="btn-secundario shrink-0 px-3"
+          onClick={() => window.print()}
+          aria-label="Imprimir"
+        >
           <Printer className="h-4 w-4" />
-          Imprimir / PDF
+          <span className="hidden sm:inline">Imprimir</span>
         </button>
+        <BotaoEnviarPdf
+          alvoId="folha-romaneio"
+          nomeArquivo={`Romaneio #${String(pedido.numero).padStart(3, "0")} - ${pedido.clienteNome}${pedido.titulo ? ` - ${pedido.titulo}` : ""}`}
+        />
       </div>
 
       <p className="nao-imprimir bg-ouro-100 px-4 py-2 text-center text-xs text-marrom-800">
-        No celular, use <strong>Imprimir → Salvar como PDF</strong> pra mandar
-        pro WhatsApp de quem vai carregar.
+        Toque em <strong>Enviar PDF</strong> e depois em <strong>Compartilhar</strong> pra
+        mandar pro WhatsApp de quem vai carregar.
       </p>
 
       {/* Folha A4 */}
-      <div className="mx-auto my-6 max-w-[210mm] bg-white p-8 text-neutral-900 shadow-xl print:my-0 print:max-w-none print:p-0 print:shadow-none">
+      <div id="folha-romaneio" className="mx-auto my-6 max-w-[210mm] bg-white p-8 text-neutral-900 shadow-xl print:my-0 print:max-w-none print:p-0 print:shadow-none">
         {/* ------------------------------ Timbre ------------------------------ */}
         <header className="evitar-quebra flex items-center gap-4 border-b-4 border-[#f5a31a] pb-4">
           <Logo className="h-16 w-auto shrink-0" variante="escura" />

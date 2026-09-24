@@ -131,15 +131,30 @@ function PedidoPageInterno() {
   const deps = { produtoPorId, salvarProduto, salvarMovimento };
 
   // Salvamento automático com uma pausa, pra não gravar a cada tecla.
-  const primeiraGravacao = useRef(true);
+  // Só grava se o conteúdo mudou de verdade desde a última gravação — sem
+  // isso, qualquer re-render que recriasse o objeto do pedido virava uma
+  // gravação, e cada gravação volta pra todos os aparelhos pelo Firestore.
+  const ultimoConteudoSalvo = useRef<string | null>(null);
   useEffect(() => {
     if (!pedido) return;
-    if (primeiraGravacao.current) {
-      primeiraGravacao.current = false;
+    const conteudo = JSON.stringify({
+      ...pedido,
+      atualizadoEm: undefined,
+      valorPedido: undefined,
+      valorFinal: undefined,
+    });
+    if (ultimoConteudoSalvo.current === null) {
+      // Primeira carga: é o que já está salvo, nada a gravar.
+      ultimoConteudoSalvo.current = conteudo;
+      return;
+    }
+    if (conteudo === ultimoConteudoSalvo.current) {
+      setSalvando(false);
       return;
     }
     setSalvando(true);
     const t = setTimeout(async () => {
+      ultimoConteudoSalvo.current = conteudo;
       const totais = calcularTotais(pedido);
       await salvarPedido({
         ...pedido,
