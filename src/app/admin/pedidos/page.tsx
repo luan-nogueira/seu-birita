@@ -7,6 +7,7 @@ import { ClipboardList, Plus, Search } from "lucide-react";
 import { Cabecalho, Modal, StatusChip, TipoChip, Vazio } from "@/components/ui";
 import { Protegido } from "@/components/Protegido";
 import { useDados, novoId } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { calcularTotais } from "@/lib/calc";
 import { brl, dataBR, hojeISO, normalizar } from "@/lib/format";
 import type { Pedido, PedidoStatus, PedidoTipo } from "@/lib/types";
@@ -220,12 +221,18 @@ function ModalNovoPedido({
     clientes,
     pedidos,
     salvarPedido,
+    salvarCliente,
     proximoNumeroPedido,
     pendenciaDoCliente,
   } = useDados();
   const router = useRouter();
+  // Sem a permissão "clientes" o Firestore recusa o cadastro.
+  const { permissoes } = useAuth();
 
   const [clienteId, setClienteId] = useState(clienteInicial);
+  // Cadastro rápido de cliente sem sair do pedido: null = escolhendo da lista.
+  const [novoCliente, setNovoCliente] = useState<{ nome: string; telefone: string } | null>(null);
+  const podeCriar = novoCliente ? novoCliente.nome.trim() !== "" : !!clienteId;
   const [tipo, setTipo] = useState<PedidoTipo>("CONSIGNACAO");
   const [titulo, setTitulo] = useState("");
   const [dataEvento, setDataEvento] = useState(hojeISO());
@@ -260,10 +267,32 @@ function ModalNovoPedido({
   }, [ultimoPedidoConsignacao]);
 
   async function criar() {
-    if (!clienteId) return;
+    if (!podeCriar) return;
     setCriando(true);
 
-    const cliente = clientes.find((c) => c.id === clienteId)!;
+    let cliente = clientes.find((c) => c.id === clienteId);
+    if (novoCliente) {
+      const nome = novoCliente.nome.trim();
+      // Mesmo nome já cadastrado (ignorando acento/maiúscula)? Usa o existente
+      // em vez de duplicar.
+      cliente = clientes.find((c) => normalizar(c.nome) === normalizar(nome));
+      if (!cliente) {
+        cliente = {
+          id: novoId(),
+          nome,
+          tipo: "PF",
+          telefone: novoCliente.telefone.trim() || undefined,
+          ativo: true,
+          criadoEm: new Date().toISOString(),
+        };
+        await salvarCliente(cliente);
+      }
+    }
+    if (!cliente) {
+      setCriando(false);
+      return;
+    }
+    const clienteIdFinal = cliente.id;
     const agora = new Date().toISOString();
     const id = novoId();
     const numero = proximoNumeroPedido();
@@ -289,7 +318,7 @@ function ModalNovoPedido({
     await salvarPedido({
       id,
       numero,
-      clienteId,
+      clienteId: clienteIdFinal,
       clienteNome: cliente.nome,
       tipo,
       titulo: titulo.trim() || undefined,
@@ -325,7 +354,7 @@ function ModalNovoPedido({
           <button
             className="btn-primario"
             onClick={criar}
-            disabled={!clienteId || criando}
+            disabled={!podeCriar || criando}
           >
             {criando ? "Criando…" : "Criar e montar"}
           </button>
@@ -337,21 +366,64 @@ function ModalNovoPedido({
           <label className="rotulo" htmlFor="np-cliente">
             Cliente
           </label>
-          <select
-            id="np-cliente"
-            className="campo"
-            value={clienteId}
-            onChange={(e) => setClienteId(e.target.value)}
-          >
-            <option value="">Selecione…</option>
-            {clientes
-              .filter((c) => c.ativo)
-              .map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nome}
-                </option>
-              ))}
-          </select>
+          {novoCliente === null ? (
+            <select
+              id="np-cliente"
+              className="campo"
+              value={clienteId}
+              onChange={(e) => {
+                if (e.target.value === "__novo__") {
+                  setClienteId("");
+                  setNovoCliente({ nome: "", telefone: "" });
+                } else {
+                  setClienteId(e.target.value);
+                }
+              }}
+            >
+              <option value="">Selecione…</option>
+              {clientes
+                .filter((c) => c.ativo)
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nome}
+                  </option>
+                ))}
+              {permissoes.clientes && (
+                <option value="__novo__">+ Cadastrar novo cliente</option>
+              )}
+            </select>
+          ) : (
+            <div className="space-y-2">
+              <input
+                id="np-cliente"
+                autoFocus
+                className="campo"
+                placeholder="Nome do cliente"
+                value={novoCliente.nome}
+                onChange={(e) => setNovoCliente({ ...novoCliente, nome: e.target.value })}
+              />
+              <div className="flex gap-2">
+                <input
+                  className="campo min-w-0 flex-1"
+                  inputMode="tel"
+                  placeholder="Telefone (opcional)"
+                  value={novoCliente.telefone}
+                  onChange={(e) => setNovoCliente({ ...novoCliente, telefone: e.target.value })}
+                />
+                <button
+                  type="button"
+                  className="btn-secundario shrink-0"
+                  onClick={() => setNovoCliente(null)}
+                >
+                  Voltar à lista
+                </button>
+              </div>
+              <p className="text-xs text-texto-suave">
+                O cliente é cadastrado ao criar o pedido. Os outros dados dá pra
+                completar depois em Clientes.
+              </p>
+            </div>
+          )}
         </div>
 
         <div>

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Cabecalho, Modal } from "@/components/ui";
 import { Protegido } from "@/components/Protegido";
 import { useDados } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { novoId } from "@/lib/db";
 import { brl, caixasEUnidades, dataBR, dataHoraBR, hojeISO, normalizar } from "@/lib/format";
 import { compararCategorias } from "@/lib/calc";
@@ -120,9 +121,12 @@ function CampoFornecedor({
   fornecedorId,
   novoNome,
   aoMudar,
+  podeCadastrar,
 }: {
   fornecedores: Fornecedor[];
   fornecedorId: string;
+  /** Sem a permissão "fornecedores" o Firestore recusa o cadastro. */
+  podeCadastrar: boolean;
   /** null = escolhendo da lista; string = digitando um fornecedor novo. */
   novoNome: string | null;
   aoMudar: (fornecedorId: string, novoNome: string | null) => void;
@@ -147,7 +151,7 @@ function CampoFornecedor({
                 {f.nome}
               </option>
             ))}
-          <option value="__novo__">+ Cadastrar novo fornecedor</option>
+          {podeCadastrar && <option value="__novo__">+ Cadastrar novo fornecedor</option>}
         </select>
       ) : (
         <>
@@ -201,7 +205,10 @@ function CamposPagamento({
   setVencimentos,
   valorTotal,
   bloqueado,
+  podePrazo,
 }: {
+  /** A prazo cria contas a pagar — exige a permissão "financeiro". */
+  podePrazo: boolean;
   pagamento: FormaCompra;
   setPagamento: (p: FormaCompra) => void;
   /** Uma data por parcela — a quantidade de parcelas é o tamanho da lista. */
@@ -236,7 +243,7 @@ function CamposPagamento({
           <button
             key={op}
             type="button"
-            disabled={!!bloqueado}
+            disabled={!!bloqueado || (op === "PRAZO" && !podePrazo)}
             onClick={() => setPagamento(op)}
             className={`rounded-lg py-2 text-sm font-bold transition disabled:opacity-60 ${
               pagamento === op ? "bg-superficie shadow-sm" : "text-texto-suave"
@@ -247,6 +254,11 @@ function CamposPagamento({
         ))}
       </div>
       {bloqueado && <p className="mt-1 text-xs text-texto-suave">{bloqueado}</p>}
+      {!podePrazo && !bloqueado && (
+        <p className="mt-1 text-xs text-texto-suave">
+          Compra a prazo só pra quem tem acesso ao Financeiro (ela cria contas a pagar).
+        </p>
+      )}
       {pagamento === "PRAZO" && !bloqueado && (
         <div className="mt-3 space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -368,6 +380,7 @@ export default function EstoquePage() {
 }
 
 function EstoquePageInterno() {
+  const { permissoes } = useAuth();
   const {
     movimentos,
     produtos,
@@ -534,7 +547,7 @@ function EstoquePageInterno() {
 
       // Compra a prazo vira conta(s) a pagar no Financeiro, uma por parcela.
       let contaPagarIds: string[] | undefined;
-      if (compra && pagamento === "PRAZO" && Number(custoTotal) > 0) {
+      if (compra && pagamento === "PRAZO" && permissoes.financeiro && Number(custoTotal) > 0) {
         contaPagarIds = await criarContasPrazo(salvarContaPagar, {
           valorTotal: Number(custoTotal),
           vencimentos,
@@ -811,6 +824,7 @@ function EstoquePageInterno() {
               fornecedores={fornecedores}
               fornecedorId={fornecedorId}
               novoNome={novoFornecedor}
+              podeCadastrar={permissoes.fornecedores}
               aoMudar={(id, nome) => {
                 setFornecedorId(id);
                 setNovoFornecedor(nome);
@@ -925,6 +939,7 @@ function EstoquePageInterno() {
 
           {tipoMovimento === "COMPRA" && (
             <CamposPagamento
+              podePrazo={permissoes.financeiro}
               pagamento={pagamento}
               setPagamento={setPagamento}
               vencimentos={vencimentos}
@@ -1252,6 +1267,7 @@ function ModalEditarCompra({
   movimento: EstoqueMovimento;
   aoFechar: () => void;
 }) {
+  const { permissoes } = useAuth();
   const {
     fornecedores,
     contasPagar,
@@ -1319,8 +1335,9 @@ function ModalEditarCompra({
           });
         }
       } else {
-        // Só o fornecedor mudou: atualiza nas contas que já existem.
-        for (const c of contas) {
+        // Só o fornecedor mudou: atualiza nas contas que já existem (quem não
+        // tem Financeiro não pode gravar lá — a conta fica com o nome antigo).
+        for (const c of permissoes.financeiro ? contas : []) {
           await salvarContaPagar({
             ...c,
             fornecedorId: fornecedor.id,
@@ -1369,6 +1386,7 @@ function ModalEditarCompra({
           fornecedores={fornecedores}
           fornecedorId={fornecedorId}
           novoNome={novoNome}
+          podeCadastrar={permissoes.fornecedores}
           aoMudar={(id, nome) => {
             setFornecedorId(id);
             setNovoNome(nome);
@@ -1377,6 +1395,7 @@ function ModalEditarCompra({
 
         {valorTotal > 0 ? (
           <CamposPagamento
+            podePrazo={permissoes.financeiro}
             pagamento={pagamento}
             setPagamento={setPagamento}
             vencimentos={vencimentos}
@@ -1385,7 +1404,9 @@ function ModalEditarCompra({
             bloqueado={
               algumaPaga
                 ? "Já tem parcela paga no Financeiro — a forma de pagamento não pode mais mudar por aqui."
-                : undefined
+                : !permissoes.financeiro && movimento.pagamento === "PRAZO"
+                  ? "Mudar o pagamento de uma compra a prazo exige acesso ao Financeiro."
+                  : undefined
             }
           />
         ) : (
