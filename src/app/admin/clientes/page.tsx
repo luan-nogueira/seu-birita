@@ -44,8 +44,11 @@ function ClientesPageInterno() {
   const {
     clientes,
     pedidos,
+    pagamentos,
     salvarCliente,
     removerCliente,
+    salvarPedido,
+    salvarPagamento,
     pendenciaDoCliente,
     carregando,
   } = useDados();
@@ -56,6 +59,12 @@ function ClientesPageInterno() {
   const [form, setForm] = useState<Formulario>(FORM_VAZIO);
   const [aberto, setAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);
+  // Juntar cadastros duplicados: o cliente sendo editado some e tudo dele
+  // passa pro escolhido aqui.
+  const [juntarComId, setJuntarComId] = useState("");
+  const [confirmandoJuntar, setConfirmandoJuntar] = useState(false);
+  // Juntar mexe em pedidos e pagamentos e apaga um cadastro.
+  const podeJuntar = permissoes.pedidos && permissoes.excluir;
   const [excluindoCliente, setExcluindoCliente] = useState<Cliente | null>(null);
 
   const filtrados = useMemo(() => {
@@ -91,18 +100,82 @@ function ClientesPageInterno() {
     setAberto(true);
   }
 
-  async function salvar() {
+  /**
+   * O pedido guarda uma cópia do nome do cliente (lista, relatório,
+   * romaneio). Sem isso, renomear o cliente deixava os pedidos com o nome
+   * antigo.
+   */
+  async function sincronizarNomeNosPedidos(clienteId: string, nome: string) {
+    if (!permissoes.pedidos) return;
+    for (const p of pedidos) {
+      if (p.clienteId === clienteId && p.clienteNome !== nome) {
+        await salvarPedido({ ...p, clienteNome: nome });
+      }
+    }
+  }
+
+  async function salvar(ignorarRepetido = false) {
     if (salvando) return;
     const nome = form.nome.trim();
     if (!nome) return;
+
+    // Renomeou pra um nome que já existe? Provavelmente é o mesmo cliente
+    // cadastrado duas vezes — oferece juntar em vez de criar outro igual.
+    const repetido = clientes.find(
+      (c) => c.id !== editando?.id && normalizar(c.nome) === normalizar(nome),
+    );
+    if (repetido && editando && podeJuntar && !ignorarRepetido) {
+      setJuntarComId(repetido.id);
+      setConfirmandoJuntar(true);
+      return;
+    }
+
     setSalvando(true);
     try {
+      const id = editando?.id ?? novoId();
       await salvarCliente({
         ...form,
         nome,
-        id: editando?.id ?? novoId(),
+        id,
         criadoEm: editando?.criadoEm ?? new Date().toISOString(),
       });
+      if (editando) await sincronizarNomeNosPedidos(id, nome);
+      setAberto(false);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  /** Passa pedidos e pagamentos do cliente editado pro escolhido e apaga o editado. */
+  async function juntar() {
+    const origem = editando;
+    const destino = clientes.find((c) => c.id === juntarComId);
+    if (!origem || !destino || origem.id === destino.id) return;
+    setSalvando(true);
+    try {
+      // Aproveita dados que só o cadastro apagado tinha.
+      await salvarCliente({
+        ...destino,
+        documento: destino.documento || form.documento || undefined,
+        telefone: destino.telefone || form.telefone || undefined,
+        email: destino.email || form.email || undefined,
+        endereco: destino.endereco || form.endereco || undefined,
+        cidade: destino.cidade || form.cidade || undefined,
+        obs: [destino.obs, form.obs].filter(Boolean).join(" · ") || undefined,
+      });
+      for (const p of pedidos) {
+        if (p.clienteId === origem.id || (p.clienteId === destino.id && p.clienteNome !== destino.nome)) {
+          await salvarPedido({ ...p, clienteId: destino.id, clienteNome: destino.nome });
+        }
+      }
+      for (const pg of pagamentos) {
+        if (pg.clienteId === origem.id) {
+          await salvarPagamento({ ...pg, clienteId: destino.id });
+        }
+      }
+      await removerCliente(origem.id);
+      setConfirmandoJuntar(false);
+      setJuntarComId("");
       setAberto(false);
     } finally {
       setSalvando(false);
@@ -263,7 +336,7 @@ function ClientesPageInterno() {
             </button>
             <button
               className="btn-primario"
-              onClick={salvar}
+              onClick={() => salvar()}
               disabled={salvando || !form.nome.trim()}
             >
               {salvando ? "Salvando…" : "Salvar"}
@@ -393,7 +466,102 @@ function ClientesPageInterno() {
             />
             <span className="text-sm font-semibold">Cliente ativo</span>
           </label>
+
+          {editando && podeJuntar && clientes.length > 1 && (
+            <div className="border-t border-borda pt-3">
+              <label className="rotulo" htmlFor="c-juntar">
+                Cadastro repetido? Juntar com
+              </label>
+              <div className="flex gap-2">
+                <select
+                  id="c-juntar"
+                  className="campo min-w-0 flex-1"
+                  value={juntarComId}
+                  onChange={(e) => setJuntarComId(e.target.value)}
+                >
+                  <option value="">Escolha o outro cadastro…</option>
+                  {clientes
+                    .filter((c) => c.id !== editando.id)
+                    .map((c) => {
+                      const n = pedidos.filter((p) => p.clienteId === c.id).length;
+                      return (
+                        <option key={c.id} value={c.id}>
+                          {c.nome} ({n} {n === 1 ? "pedido" : "pedidos"})
+                        </option>
+                      );
+                    })}
+                </select>
+                <button
+                  type="button"
+                  className="btn-secundario shrink-0"
+                  disabled={!juntarComId || salvando}
+                  onClick={() => setConfirmandoJuntar(true)}
+                >
+                  Juntar
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-texto-suave">
+                Os pedidos e pagamentos deste cliente passam pro cadastro escolhido, e
+                este aqui é apagado.
+              </p>
+            </div>
+          )}
         </div>
+      </Modal>
+
+      <Modal
+        aberto={confirmandoJuntar && !!editando}
+        aoFechar={() => !salvando && setConfirmandoJuntar(false)}
+        titulo="Juntar cadastros"
+        rodape={
+          <>
+            <button
+              className="btn-secundario"
+              onClick={() => setConfirmandoJuntar(false)}
+              disabled={salvando}
+            >
+              Cancelar
+            </button>
+            {normalizar(form.nome) ===
+              normalizar(clientes.find((c) => c.id === juntarComId)?.nome ?? "") && (
+              <button
+                className="btn-secundario"
+                disabled={salvando}
+                onClick={() => {
+                  setConfirmandoJuntar(false);
+                  salvar(true);
+                }}
+              >
+                Manter separados
+              </button>
+            )}
+            <button className="btn-primario" onClick={juntar} disabled={salvando}>
+              {salvando ? "Juntando…" : "Juntar"}
+            </button>
+          </>
+        }
+      >
+        {editando && (() => {
+          const destino = clientes.find((c) => c.id === juntarComId);
+          const nPedidos = pedidos.filter((p) => p.clienteId === editando.id).length;
+          const nPagamentos = pagamentos.filter((p) => p.clienteId === editando.id).length;
+          return (
+            <div className="space-y-2 text-sm text-texto-suave">
+              <p>
+                Já existe o cadastro <strong className="text-texto">{destino?.nome}</strong>.
+                Juntar com <strong className="text-texto">{editando.nome}</strong>?
+              </p>
+              <p>
+                {nPedidos} {nPedidos === 1 ? "pedido" : "pedidos"} e {nPagamentos}{" "}
+                {nPagamentos === 1 ? "pagamento" : "pagamentos"} de{" "}
+                <strong className="text-texto">{editando.nome}</strong> passam pra{" "}
+                <strong className="text-texto">{destino?.nome}</strong>, e o cadastro{" "}
+                <strong className="text-texto">{editando.nome}</strong> é apagado. Não dá
+                pra desfazer.
+              </p>
+            </div>
+          );
+        })()}
       </Modal>
 
       <Modal
