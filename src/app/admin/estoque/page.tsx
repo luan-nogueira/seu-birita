@@ -80,32 +80,32 @@ async function resolverFornecedor(
   return f ? { id: f.id, nome: f.nome } : {};
 }
 
-/** Cria uma conta a pagar por parcela, todo mês no mesmo dia do 1º vencimento. */
+/** Cria uma conta a pagar por parcela, uma para cada data de vencimento. */
 async function criarContasPrazo(
   salvarContaPagar: (c: ContaPagar) => Promise<void>,
   dados: {
     valorTotal: number;
-    parcelas: number;
-    primeiroVencimento: string;
+    vencimentos: string[];
     descricao: string;
     fornecedor: { id?: string; nome?: string };
     obs?: string;
   },
 ): Promise<string[]> {
-  const valores = dividirParcelas(dados.valorTotal, dados.parcelas);
+  const n = dados.vencimentos.length;
+  const valores = dividirParcelas(dados.valorTotal, n);
   const ids: string[] = [];
   for (let i = 0; i < valores.length; i++) {
     const id = novoId();
     await salvarContaPagar({
       id,
       descricao:
-        dados.parcelas > 1
-          ? `${dados.descricao} (${i + 1}/${dados.parcelas})`
+        n > 1
+          ? `${dados.descricao} (${i + 1}/${n})`
           : dados.descricao,
       fornecedorId: dados.fornecedor.id,
       fornecedorNome: dados.fornecedor.nome,
       valor: valores[i],
-      vencimento: somarMeses(dados.primeiroVencimento || hojeISO(), i),
+      vencimento: dados.vencimentos[i] || hojeISO(),
       obs: dados.obs || undefined,
       pago: false,
       criadoEm: new Date().toISOString(),
@@ -173,27 +173,61 @@ function CampoFornecedor({
   );
 }
 
+/** "MES" = todo mês no mesmo dia; número = a cada N dias. */
+type Intervalo = "MES" | number;
+
+const INTERVALOS: { valor: Intervalo; rotulo: string }[] = [
+  { valor: "MES", rotulo: "Todo mês" },
+  { valor: 7, rotulo: "A cada 7 dias" },
+  { valor: 10, rotulo: "A cada 10 dias" },
+  { valor: 14, rotulo: "A cada 14 dias" },
+  { valor: 15, rotulo: "A cada 15 dias" },
+  { valor: 21, rotulo: "A cada 21 dias" },
+  { valor: 28, rotulo: "A cada 28 dias" },
+  { valor: 30, rotulo: "A cada 30 dias" },
+];
+
+function gerarVencimentos(primeiro: string, n: number, intervalo: Intervalo): string[] {
+  const base = primeiro || hojeISO();
+  return Array.from({ length: n }, (_, i) =>
+    intervalo === "MES" ? somarMeses(base, i) : somarDias(base, intervalo * i),
+  );
+}
+
 function CamposPagamento({
   pagamento,
   setPagamento,
-  parcelas,
-  setParcelas,
-  vencimento,
-  setVencimento,
+  vencimentos,
+  setVencimentos,
   valorTotal,
   bloqueado,
 }: {
   pagamento: FormaCompra;
   setPagamento: (p: FormaCompra) => void;
-  parcelas: number;
-  setParcelas: (n: number) => void;
-  vencimento: string;
-  setVencimento: (v: string) => void;
+  /** Uma data por parcela — a quantidade de parcelas é o tamanho da lista. */
+  vencimentos: string[];
+  setVencimentos: (v: string[]) => void;
   valorTotal: number;
   /** Mensagem quando não dá pra mudar (ex.: já tem parcela paga). */
   bloqueado?: string;
 }) {
+  const [intervalo, setIntervalo] = useState<Intervalo>("MES");
+  const parcelas = vencimentos.length;
+  const primeiro = vencimentos[0] ?? "";
   const valores = valorTotal > 0 ? dividirParcelas(valorTotal, parcelas) : [];
+
+  // Mudar parcelas, intervalo ou 1º vencimento recalcula as datas; editar a
+  // data de uma parcela específica mexe só nela.
+  function mudarDataParcela(i: number, data: string) {
+    if (i === 0) {
+      setVencimentos(gerarVencimentos(data, parcelas, intervalo));
+      return;
+    }
+    const novas = [...vencimentos];
+    novas[i] = data;
+    setVencimentos(novas);
+  }
+
   return (
     <div>
       <label className="mb-1.5 block text-sm font-semibold">Pagamento</label>
@@ -223,7 +257,9 @@ function CamposPagamento({
               <select
                 id="parcelas-compra"
                 value={parcelas}
-                onChange={(e) => setParcelas(Number(e.target.value))}
+                onChange={(e) =>
+                  setVencimentos(gerarVencimentos(primeiro, Number(e.target.value), intervalo))
+                }
                 className="campo block w-full"
               >
                 {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
@@ -241,27 +277,62 @@ function CamposPagamento({
                 id="vencimento-compra"
                 type="date"
                 required
-                value={vencimento}
-                onChange={(e) => setVencimento(e.target.value)}
+                value={primeiro}
+                onChange={(e) => mudarDataParcela(0, e.target.value)}
                 className="campo block w-full"
               />
             </div>
           </div>
-          {valores.length > 1 && (
-            <ul className="rounded-xl border border-borda px-3 py-2 text-xs text-texto-suave">
-              {valores.map((v, i) => (
-                <li key={i} className="flex justify-between py-0.5 tabular-nums">
-                  <span>
-                    {i + 1}/{valores.length} · {dataBR(somarMeses(vencimento || hojeISO(), i))}
-                  </span>
-                  <span className="font-semibold text-texto">{brl(v)}</span>
-                </li>
-              ))}
-            </ul>
+
+          {parcelas > 1 && (
+            <>
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold" htmlFor="intervalo-compra">
+                  Intervalo entre parcelas
+                </label>
+                <select
+                  id="intervalo-compra"
+                  value={String(intervalo)}
+                  onChange={(e) => {
+                    const novo: Intervalo =
+                      e.target.value === "MES" ? "MES" : Number(e.target.value);
+                    setIntervalo(novo);
+                    setVencimentos(gerarVencimentos(primeiro, parcelas, novo));
+                  }}
+                  className="campo block w-full"
+                >
+                  {INTERVALOS.map((op) => (
+                    <option key={String(op.valor)} value={String(op.valor)}>
+                      {op.rotulo}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <ul className="divide-y divide-borda rounded-xl border border-borda text-sm">
+                {vencimentos.map((data, i) => (
+                  <li key={i} className="flex items-center gap-2 px-3 py-1.5">
+                    <span className="w-9 shrink-0 text-xs text-texto-suave tabular-nums">
+                      {i + 1}/{parcelas}
+                    </span>
+                    <input
+                      type="date"
+                      aria-label={`Vencimento da parcela ${i + 1}`}
+                      value={data}
+                      onChange={(e) => mudarDataParcela(i, e.target.value)}
+                      className="campo h-auto min-h-0 min-w-0 flex-1 px-2 py-1 text-sm"
+                    />
+                    <span className="w-24 shrink-0 text-right font-semibold tabular-nums">
+                      {valores[i] !== undefined ? brl(valores[i]) : "—"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
           <p className="text-xs text-texto-suave">
             {parcelas > 1
-              ? "Cada parcela entra em Financeiro → Contas a pagar, todo mês no mesmo dia."
+              ? "Toque numa data pra mudar só aquela parcela. Cada parcela entra em Financeiro → Contas a pagar."
               : "Vai entrar em Financeiro → Contas a pagar com o valor total da compra."}
           </p>
         </div>
@@ -352,8 +423,7 @@ function EstoquePageInterno() {
   // Cadastro rápido de fornecedor direto na compra, só com o nome.
   const [novoFornecedor, setNovoFornecedor] = useState<string | null>(null);
   const [pagamento, setPagamento] = useState<FormaCompra>("AVISTA");
-  const [parcelas, setParcelas] = useState(1);
-  const [vencimento, setVencimento] = useState(() => somarDias(hojeISO(), 30));
+  const [vencimentos, setVencimentos] = useState<string[]>(() => [somarDias(hojeISO(), 30)]);
   const [quantidadeUn, setQuantidadeUn] = useState("");
   // Só no Ajuste: contagem do galpão em caixas (as unidades soltas vão em quantidadeUn).
   const [contagemCx, setContagemCx] = useState("");
@@ -401,8 +471,7 @@ function EstoquePageInterno() {
     setFornecedorId("");
     setNovoFornecedor(null);
     setPagamento("AVISTA");
-    setParcelas(1);
-    setVencimento(somarDias(hojeISO(), 30));
+    setVencimentos([somarDias(hojeISO(), 30)]);
     setQuantidadeUn("");
     setContagemCx("");
     setCustoTotal("");
@@ -468,8 +537,7 @@ function EstoquePageInterno() {
       if (compra && pagamento === "PRAZO" && Number(custoTotal) > 0) {
         contaPagarIds = await criarContasPrazo(salvarContaPagar, {
           valorTotal: Number(custoTotal),
-          parcelas,
-          primeiroVencimento: vencimento,
+          vencimentos,
           descricao: `Compra: ${qtd} un de ${produto.nome}`,
           fornecedor,
           obs,
@@ -753,7 +821,7 @@ function EstoquePageInterno() {
           {tipoMovimento === "AJUSTE" ? (
             <div>
               <label className="mb-1.5 block text-sm font-semibold">
-                Quantidade contada no galpão
+                Quanto tem no galpão agora
               </label>
               <div className="grid grid-cols-2 gap-3">
                 {(produtoSelecionado?.unPorCaixa ?? 1) > 1 && (
@@ -785,25 +853,35 @@ function EstoquePageInterno() {
                   <span className="pointer-events-none absolute top-2.5 right-4 text-sm text-texto-suave">un</span>
                 </div>
               </div>
-              {produtoSelecionado && (
-                <p className="mt-2 text-xs text-texto-suave">
-                  No sistema: <strong>{produtoSelecionado.estoqueUn} un</strong>
-                  {contagem !== null && (
-                    <>
-                      {" "}→ contado: <strong>{contagem} un</strong> → vai lançar{" "}
-                      <strong
-                        className={
-                          contagem - produtoSelecionado.estoqueUn < 0
-                            ? "text-red-600 dark:text-red-400"
-                            : "text-emerald-600 dark:text-emerald-400"
-                        }
-                      >
-                        {contagem - produtoSelecionado.estoqueUn > 0 ? "+" : ""}
-                        {contagem - produtoSelecionado.estoqueUn} un
-                      </strong>
-                    </>
-                  )}
-                </p>
+              <p className="mt-1 text-xs text-texto-suave">
+                Digite o total que tem no galpão agora (não o quanto somar).
+              </p>
+              {produtoSelecionado && contagem !== null && (
+                <div className="mt-2 rounded-xl border border-borda bg-superficie-2 px-3 py-2 text-sm">
+                  <p>
+                    Estoque vai ficar em{" "}
+                    <strong className="tabular-nums">{contagem} un</strong>
+                    {produtoSelecionado.unPorCaixa > 1 && (
+                      <span className="text-texto-suave">
+                        {" "}({caixasEUnidades(contagem, produtoSelecionado.unPorCaixa)})
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-texto-suave">
+                    Hoje o sistema mostra {produtoSelecionado.estoqueUn} un — a correção é de{" "}
+                    <strong
+                      className={
+                        contagem - produtoSelecionado.estoqueUn < 0
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-emerald-600 dark:text-emerald-400"
+                      }
+                    >
+                      {contagem - produtoSelecionado.estoqueUn > 0 ? "+" : ""}
+                      {contagem - produtoSelecionado.estoqueUn} un
+                    </strong>
+                    .
+                  </p>
+                </div>
               )}
             </div>
           ) : (
@@ -849,10 +927,8 @@ function EstoquePageInterno() {
             <CamposPagamento
               pagamento={pagamento}
               setPagamento={setPagamento}
-              parcelas={parcelas}
-              setParcelas={setParcelas}
-              vencimento={vencimento}
-              setVencimento={setVencimento}
+              vencimentos={vencimentos}
+              setVencimentos={setVencimentos}
               valorTotal={Number(custoTotal) || 0}
             />
           )}
@@ -1197,15 +1273,16 @@ function ModalEditarCompra({
 
   const inicial = {
     pagamento: (movimento.pagamento ?? "AVISTA") as FormaCompra,
-    parcelas: Math.max(1, contas.length),
-    vencimento: contas[0]?.vencimento ?? somarDias(movimento.data.slice(0, 10), 30),
+    vencimentos:
+      contas.length > 0
+        ? contas.map((c) => c.vencimento)
+        : [somarDias(movimento.data.slice(0, 10), 30)],
   };
 
   const [fornecedorId, setFornecedorId] = useState(movimento.fornecedorId ?? "");
   const [novoNome, setNovoNome] = useState<string | null>(null);
   const [pagamento, setPagamento] = useState<FormaCompra>(inicial.pagamento);
-  const [parcelas, setParcelas] = useState(inicial.parcelas);
-  const [vencimento, setVencimento] = useState(inicial.vencimento);
+  const [vencimentos, setVencimentos] = useState<string[]>(inicial.vencimentos);
   const [salvando, setSalvando] = useState(false);
 
   const valorTotal = movimento.custoUn
@@ -1225,7 +1302,7 @@ function ModalEditarCompra({
       const mudouPagamento =
         pagamento !== inicial.pagamento ||
         (pagamento === "PRAZO" &&
-          (parcelas !== inicial.parcelas || vencimento !== inicial.vencimento));
+          vencimentos.join() !== inicial.vencimentos.join());
 
       let ids = contas.map((c) => c.id);
       if (mudouPagamento && !algumaPaga) {
@@ -1235,8 +1312,7 @@ function ModalEditarCompra({
         if (pagamento === "PRAZO" && valorTotal > 0) {
           ids = await criarContasPrazo(salvarContaPagar, {
             valorTotal,
-            parcelas,
-            primeiroVencimento: vencimento,
+            vencimentos,
             descricao: `Compra: ${movimento.quantidadeUn} un de ${movimento.produtoNome}`,
             fornecedor,
             obs: movimento.obs,
@@ -1303,10 +1379,8 @@ function ModalEditarCompra({
           <CamposPagamento
             pagamento={pagamento}
             setPagamento={setPagamento}
-            parcelas={parcelas}
-            setParcelas={setParcelas}
-            vencimento={vencimento}
-            setVencimento={setVencimento}
+            vencimentos={vencimentos}
+            setVencimentos={setVencimentos}
             valorTotal={valorTotal}
             bloqueado={
               algumaPaga
