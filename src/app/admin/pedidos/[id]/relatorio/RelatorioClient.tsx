@@ -207,11 +207,14 @@ export default function RelatorioPage() {
                 const devolvido = devolvidoUn(item, pedido.tipo);
                 const saldo = saldoUn(item, pedido.tipo);
 
-                const entrCx = Math.floor(entregue / item.unPorCaixa);
-                const entrUn = entregue % item.unPorCaixa;
-                
-                const devCx = Math.floor(devolvido / item.unPorCaixa);
-                const devUn = devolvido % item.unPorCaixa;
+                // Cx e un exatamente como foram digitados no pedido, sem
+                // reconverter (6 cx + 34 un não vira 7 cx + 10 un) — igual
+                // ao romaneio.
+                const entrCx = item.entregas.reduce((s, r) => s + (r.cx || 0), 0);
+                const entrUn = item.entregas.reduce((s, r) => s + (r.un || 0), 0);
+
+                const devCx = consignacao ? item.devolucaoCx || 0 : 0;
+                const devUn = consignacao ? item.devolucaoUn || 0 : 0;
 
                 return (
                   <tr
