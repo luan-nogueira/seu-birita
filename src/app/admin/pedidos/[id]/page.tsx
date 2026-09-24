@@ -1,12 +1,15 @@
-// Server Component só pra segurar a config de rota — a página em si é
-// inteira client-side (dados vêm do Firestore, não do servidor). Sem esse
-// wrapper, o "force-static" é ignorado dentro de um arquivo "use client" e
-// o Next trata a rota como dinâmica (function serverless a cada abertura,
-// com cold start).
+// Endereço antigo (/admin/pedidos/[id]...) — mantido pra links e
+// históricos que já existem. Os links do sistema usam o endereço novo com
+// ?id= (ver src/lib/rotas.ts), que é mais rápido.
 export const dynamic = "force-static";
 
+import { Suspense } from "react";
 import PedidoDetalheClient from "./PedidoDetalheClient";
 
 export default function Page() {
-  return <PedidoDetalheClient />;
+  return (
+    <Suspense fallback={<p className="p-6 text-sm text-texto-suave">Carregando pedido…</p>}>
+      <PedidoDetalheClient />
+    </Suspense>
+  );
 }

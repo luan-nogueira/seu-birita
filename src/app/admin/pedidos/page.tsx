@@ -8,6 +8,7 @@ import { Cabecalho, Modal, StatusChip, TipoChip, Vazio } from "@/components/ui";
 import { Protegido } from "@/components/Protegido";
 import { useDados, novoId } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
+import { rotaPedido } from "@/lib/rotas";
 import { calcularTotais } from "@/lib/calc";
 import { brl, dataBR, hojeISO, normalizar } from "@/lib/format";
 import type { Pedido, PedidoStatus, PedidoTipo } from "@/lib/types";
@@ -169,7 +170,7 @@ function CartaoPedido({ pedido }: { pedido: Pedido }) {
   return (
     <li>
       <Link
-        href={`/admin/pedidos/${pedido.id}`}
+        href={rotaPedido(pedido.id)}
         className="card block p-4 transition hover:border-borda-forte hover:bg-superficie-2"
       >
         <div className="flex items-start gap-3">
@@ -296,7 +297,7 @@ function ModalNovoPedido({
 
     setCriando(false);
     aoFechar();
-    router.push(`/admin/pedidos/${id}`);
+    router.push(rotaPedido(id));
   }
 
   return (

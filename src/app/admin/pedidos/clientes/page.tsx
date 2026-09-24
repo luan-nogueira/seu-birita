@@ -19,6 +19,7 @@ import {
 import { Cabecalho, Modal } from "@/components/ui";
 import { Protegido } from "@/components/Protegido";
 import { useDados, novoId } from "@/lib/store";
+import { rotaPedido } from "@/lib/rotas";
 import { calcularTotais, efeitoEstoque } from "@/lib/calc";
 import { aplicarAjusteEstoque } from "@/lib/estoque";
 import { brl, dataBR, dataHoraBR, hojeISO, telefoneBR } from "@/lib/format";
@@ -165,7 +166,7 @@ function PedidosClientesPageInterno() {
       await salvarPedidoCliente({ ...pc, status: "CONFIRMADO", atualizadoEm: agora });
 
       setPedidoAberto(null);
-      router.push(`/admin/pedidos/${novoPedido.id}`);
+      router.push(rotaPedido(novoPedido.id));
     } finally {
       setConvertendo(false);
     }

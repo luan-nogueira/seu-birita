@@ -4,7 +4,7 @@ import { useEffect } from "react";
 
 import Link from "next/link";
 import { BotaoEnviarPdf, BotaoVoltar } from "@/components/AcoesFolha";
-import { useParams } from "next/navigation";
+import { rotaPedido, useIdPedido } from "@/lib/rotas";
 import { ArrowLeft, Printer } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { useDados } from "@/lib/store";
@@ -21,7 +21,7 @@ import { brl, brlOuTraco, dataBR, num, telefoneBR } from "@/lib/format";
 import { EMPRESA } from "@/lib/empresa";
 
 export default function RelatorioPage() {
-  const { id } = useParams<{ id: string }>();
+  const id = useIdPedido();
   const { pedidoPorId, clientePorId, produtoPorId, carregando } = useDados();
 
   const pedido = pedidoPorId(id);
@@ -71,7 +71,7 @@ export default function RelatorioPage() {
     <div className="min-h-dvh bg-neutral-200 print:bg-white">
       {/* Barra de ações — não sai no papel */}
       <div className="nao-imprimir sticky top-0 z-10 flex items-center gap-2 border-b border-black/10 bg-barra px-4 py-3 text-barra-texto">
-        <BotaoVoltar href={`/admin/pedidos/${pedido.id}`} rotulo="Voltar ao pedido" />
+        <BotaoVoltar href={rotaPedido(pedido.id)} rotulo="Voltar ao pedido" />
         <p className="min-w-0 flex-1 truncate text-sm font-semibold">
           Relatório #{String(pedido.numero).padStart(3, "0")} —{" "}
           {pedido.clienteNome}

@@ -20,6 +20,7 @@ import {
 import { Cabecalho, StatusChip } from "@/components/ui";
 import { ModalAgendarEvento } from "@/components/ModalAgendarEvento";
 import { useDados } from "@/lib/store";
+import { rotaPedido } from "@/lib/rotas";
 import { useAuth } from "@/lib/auth";
 import { calcularTotais, lucroTotal, lucroRecebidoTotal } from "@/lib/calc";
 import { brl, dataBR, hojeISO } from "@/lib/format";
@@ -210,7 +211,7 @@ export default function InicioPage() {
                 return (
                   <li key={p.id}>
                     <Link
-                      href={`/admin/pedidos/${p.id}`}
+                      href={rotaPedido(p.id)}
                       className="flex items-center gap-3 px-4 py-3 transition hover:bg-superficie-2"
                     >
                       <div className="min-w-0 flex-1">
@@ -317,7 +318,7 @@ export default function InicioPage() {
                 return (
                   <li key={p.id}>
                     <Link
-                      href={`/admin/pedidos/${p.id}`}
+                      href={rotaPedido(p.id)}
                       className="flex items-center gap-3 px-4 py-3 transition hover:bg-superficie-2"
                     >
                       <div className="min-w-0 flex-1">

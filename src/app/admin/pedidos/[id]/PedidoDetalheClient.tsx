@@ -2,7 +2,8 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { rotaRelatorio, rotaRomaneio, useIdPedido } from "@/lib/rotas";
 import {
   ArrowLeft,
   ArrowLeftRight,
@@ -76,15 +77,19 @@ const ROTULO_STATUS: Record<PedidoStatus, string> = {
 };
 
 export default function PedidoPage() {
+  // A tela é a mesma pra todo pedido (o id vem do ?id=): a key força
+  // recomeçar do zero ao trocar de pedido, senão o estado local e a
+  // baseline de estoque do anterior seriam reaproveitados.
+  const id = useIdPedido();
   return (
     <Protegido chave="pedidos">
-      <PedidoPageInterno />
+      <PedidoPageInterno key={id} />
     </Protegido>
   );
 }
 
 function PedidoPageInterno() {
-  const { id } = useParams<{ id: string }>();
+  const id = useIdPedido();
   const router = useRouter();
   const { permissoes } = useAuth();
   const {
@@ -310,7 +315,7 @@ function PedidoPageInterno() {
           <IndicadorSalvamento salvando={salvando} />
 
           <Link
-            href={`/admin/pedidos/${pedido.id}/romaneio`}
+            href={rotaRomaneio(pedido.id)}
             className="btn-secundario shrink-0 px-3"
           >
             <ClipboardList className="h-4 w-4" />
@@ -318,7 +323,7 @@ function PedidoPageInterno() {
           </Link>
 
           <Link
-            href={`/admin/pedidos/${pedido.id}/relatorio`}
+            href={rotaRelatorio(pedido.id)}
             className="btn-primario shrink-0 px-3"
           >
             <FileText className="h-4 w-4" />
