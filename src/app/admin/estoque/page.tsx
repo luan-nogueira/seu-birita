@@ -7,7 +7,7 @@ import { useDados } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { novoId } from "@/lib/db";
 import { brl, caixasEUnidades, dataBR, dataHoraBR, hojeISO, normalizar } from "@/lib/format";
-import { compararCategorias, saldoUn } from "@/lib/calc";
+import { compararCategorias } from "@/lib/calc";
 import {
   AlertTriangle,
   ArrowDown,
@@ -24,7 +24,6 @@ import type {
   EstoqueMovimento,
   EstoqueOrigem,
   Fornecedor,
-  Pedido,
   Produto,
 } from "@/lib/types";
 
@@ -366,38 +365,6 @@ function somarMeses(iso: string, meses: number): string {
   return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
 }
 
-interface EmEvento {
-  pedido: Pedido;
-  quantidade: number;
-}
-
-/**
- * Mercadoria que está fora do galpão, num evento de consignação que ainda
- * não voltou (pedido "Entregue" — depois de conferir a devolução ele vira
- * "Aguardando acerto" e o que sobrou já entrou de volta no estoque).
- * O estoqueUn do produto já é só o que está no galpão, porque a entrega
- * desconta; somando os dois dá o total que a empresa tem.
- */
-function mercadoriaEmEventos(pedidos: Pedido[]): Map<string, EmEvento[]> {
-  const mapa = new Map<string, EmEvento[]>();
-  for (const pedido of pedidos) {
-    if (pedido.tipo !== "CONSIGNACAO" || pedido.status !== "ENTREGUE") continue;
-    const porProduto = new Map<string, number>();
-    for (const item of pedido.itens) {
-      const qtd = saldoUn(item, pedido.tipo);
-      if (qtd > 0) porProduto.set(item.produtoId, (porProduto.get(item.produtoId) ?? 0) + qtd);
-    }
-    for (const [produtoId, quantidade] of porProduto) {
-      if (!mapa.has(produtoId)) mapa.set(produtoId, []);
-      mapa.get(produtoId)!.push({ pedido, quantidade });
-    }
-  }
-  for (const lista of mapa.values()) {
-    lista.sort((a, b) => a.pedido.dataEvento.localeCompare(b.pedido.dataEvento));
-  }
-  return mapa;
-}
-
 /** Primeiro dia do mês atual, formato YYYY-MM-DD. */
 function inicioDoMes(): string {
   const hoje = new Date();
@@ -425,10 +392,7 @@ function EstoquePageInterno() {
     produtoPorId,
     pedidoPorId,
     removerMovimento,
-    pedidos,
   } = useDados();
-
-  const emEventos = useMemo(() => mercadoriaEmEventos(pedidos), [pedidos]);
 
   const [busca, setBusca] = useState("");
   const [produtoHistorico, setProdutoHistorico] = useState<Produto | null>(null);
@@ -748,17 +712,6 @@ function EstoquePageInterno() {
                                 {caixasEUnidades(p.estoqueUn, p.unPorCaixa)}
                               </span>
                             )}
-                            {(() => {
-                              const fora = (emEventos.get(p.id) ?? []).reduce(
-                                (soma, e) => soma + e.quantidade,
-                                0,
-                              );
-                              return fora > 0 ? (
-                                <span className="mt-0.5 block text-[10px] font-bold text-sky-600 uppercase dark:text-sky-400">
-                                  + {fora} em evento
-                                </span>
-                              ) : null;
-                            })()}
                           </div>
                           <ChevronRight className="h-4 w-4 shrink-0 text-texto-suave" />
                         </button>
@@ -774,8 +727,7 @@ function EstoquePageInterno() {
 
       {produtoHistorico && (
         <ModalHistorico
-          produto={produtoPorId(produtoHistorico.id) ?? produtoHistorico}
-          emEventos={emEventos.get(produtoHistorico.id) ?? []}
+          produto={produtoHistorico}
           movimentos={movimentos.filter((m) => m.produtoId === produtoHistorico.id)}
           aoFechar={() => setProdutoHistorico(null)}
         />
@@ -1061,12 +1013,10 @@ function resumoPrazo(m: EstoqueMovimento, contasPagar: ContaPagar[]): string {
 
 function ModalHistorico({
   produto,
-  emEventos,
   movimentos,
   aoFechar,
 }: {
   produto: Produto;
-  emEventos: EmEvento[];
   movimentos: EstoqueMovimento[];
   aoFechar: () => void;
 }) {
@@ -1153,62 +1103,23 @@ function ModalHistorico({
             Quantidade por caixa: <strong className="text-texto">{produto.unPorCaixa} un</strong>
           </p>
         )}
-        {(() => {
-          const fora = emEventos.reduce((soma, e) => soma + e.quantidade, 0);
-          const cx = (n: number) =>
-            produto.unPorCaixa > 1 ? (
+        <div className="card flex items-center justify-between px-4 py-3">
+          <span className="text-sm font-semibold text-texto-suave">Estoque atual</span>
+          <div className="text-right">
+            <span
+              className={`block text-xl font-black tabular-nums ${
+                produto.estoqueUn < 0 ? "text-red-600 dark:text-red-400" : ""
+              }`}
+            >
+              {produto.estoqueUn} un
+            </span>
+            {produto.unPorCaixa > 1 && (
               <span className="block text-[11px] font-semibold text-texto-suave uppercase">
-                {caixasEUnidades(n, produto.unPorCaixa)}
+                {caixasEUnidades(produto.estoqueUn, produto.unPorCaixa)}
               </span>
-            ) : null;
-          return (
-            <div className="card divide-y divide-borda">
-              <div className="flex items-center justify-between px-4 py-3">
-                <span className="text-sm font-semibold text-texto-suave">No galpão</span>
-                <div className="text-right">
-                  <span
-                    className={`block text-xl font-black tabular-nums ${
-                      produto.estoqueUn < 0 ? "text-red-600 dark:text-red-400" : ""
-                    }`}
-                  >
-                    {produto.estoqueUn} un
-                  </span>
-                  {cx(produto.estoqueUn)}
-                </div>
-              </div>
-              {emEventos.map(({ pedido, quantidade }) => (
-                <div key={pedido.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold">
-                      Em evento · {pedido.clienteNome}
-                    </p>
-                    <p className="text-xs text-texto-suave">
-                      Pedido #{String(pedido.numero).padStart(3, "0")} · {dataBR(pedido.dataEvento)}
-                      {pedido.titulo && ` · ${pedido.titulo}`}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <span className="block font-black tabular-nums text-sky-600 dark:text-sky-400">
-                      {quantidade} un
-                    </span>
-                    {cx(quantidade)}
-                  </div>
-                </div>
-              ))}
-              {fora > 0 && (
-                <div className="flex items-center justify-between bg-superficie-2 px-4 py-3">
-                  <span className="text-sm font-semibold">Total (galpão + eventos)</span>
-                  <div className="text-right">
-                    <span className="block text-lg font-black tabular-nums">
-                      {produto.estoqueUn + fora} un
-                    </span>
-                    {cx(produto.estoqueUn + fora)}
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })()}
+            )}
+          </div>
+        </div>
         {produto.estoqueUn < 0 && (
           <p className="-mt-2 text-xs text-red-600 dark:text-red-400">
             Negativo — venderam mais do que estava lançado. Faz um "Ajuste" pra
