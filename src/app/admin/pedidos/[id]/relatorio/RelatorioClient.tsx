@@ -170,16 +170,16 @@ export default function RelatorioPage() {
         <table className="mt-5 w-full border-collapse text-[11px]">
           <thead>
             <tr className="bg-[#3b1b0e] text-[#f3dca6]">
-              <th className="px-2 py-2 text-left font-bold" rowSpan={2}>Produto</th>
+              <th className="px-2 py-2 text-left font-bold align-bottom whitespace-nowrap" rowSpan={2}>Produto</th>
               <th className="px-1 py-1 text-center font-bold border-b border-[#f3dca6]/20" colSpan={3}>Entregue</th>
               {consignacao && (
                 <th className="px-1 py-1 text-center font-bold border-b border-[#f3dca6]/20" colSpan={3}>Devolvido</th>
               )}
-              <th className="px-2 py-2 text-right font-bold" rowSpan={2}>
+              <th className="px-2 py-2 text-right font-bold align-bottom whitespace-nowrap" rowSpan={2}>
                 {consignacao ? "Consumo" : "Qtd"}
               </th>
-              <th className="px-2 py-2 text-right font-bold" rowSpan={2}>Valor un</th>
-              <th className="px-2 py-2 text-right font-bold" rowSpan={2}>Total</th>
+              <th className="px-2 py-2 text-right font-bold align-bottom whitespace-nowrap" rowSpan={2}>Valor un</th>
+              <th className="px-2 py-2 text-right font-bold align-bottom whitespace-nowrap" rowSpan={2}>Total</th>
             </tr>
             <tr className="bg-[#3b1b0e] text-[#f3dca6]">
               <th className="px-1 py-1 text-right font-bold text-[9px] uppercase">Cx</th>
@@ -233,6 +233,25 @@ export default function RelatorioPage() {
                           ({item.unPorCaixa} un/cx)
                         </span>
                       )}
+                      {/* Datas por remessa — só aparece quando há múltiplas entregas com data */}
+                      {item.entregas.length > 1 &&
+                        item.entregas.some((r) => r.data) && (
+                          <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0">
+                            {item.entregas.map((r, ri) =>
+                              r.data ? (
+                                <span
+                                  key={ri}
+                                  className="text-[9px] text-neutral-400"
+                                >
+                                  {item.entregas.length > 1
+                                    ? `Entrega ${r.numero}: `
+                                    : ""}
+                                  {dataBR(r.data)}
+                                </span>
+                              ) : null,
+                            )}
+                          </div>
+                        )}
                     </td>
                     <td className="border-b border-neutral-200 px-1 py-1.5 text-right tabular-nums text-neutral-500">
                       {item.unPorCaixa > 1 && entrCx > 0 ? num(entrCx) : "—"}

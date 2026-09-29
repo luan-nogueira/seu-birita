@@ -84,6 +84,8 @@ export interface Remessa {
   numero: number;
   cx: number;
   un: number;
+  /** Data da entrega desta remessa (ISO date string). Opcional — pedidos antigos não têm. */
+  data?: string;
 }
 
 export interface PedidoItem {

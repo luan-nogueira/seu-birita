@@ -726,7 +726,13 @@ function CartaoItem({
   const saldo = saldoUn(item, tipo);
   const excedeu = devolvido > entregue;
 
-  function mudarEntrega(indice: number, campo: "cx" | "un", valor: number) {
+  function mudarEntrega(indice: number, campo: "cx" | "un", valor: number): void;
+  function mudarEntrega(indice: number, campo: "data", valor: string): void;
+  function mudarEntrega(
+    indice: number,
+    campo: "cx" | "un" | "data",
+    valor: number | string,
+  ) {
     const entregas = item.entregas.map((e, i) =>
       i === indice ? { ...e, [campo]: valor } : e,
     );
@@ -765,18 +771,35 @@ function CartaoItem({
           />
         )}
         {item.entregas.map((e, i) => (
-          <LinhaQtd
-            key={i}
-            rotulo={
-              item.entregas.length > 1 ? `Entrega ${e.numero}` : "Entrega"
-            }
-            nomeItem={item.nome}
-            cx={e.cx}
-            un={e.un}
-            unPorCaixa={item.unPorCaixa}
-            aoMudarCx={(v) => mudarEntrega(i, "cx", v)}
-            aoMudarUn={(v) => mudarEntrega(i, "un", v)}
-          />
+          <div key={i} className="space-y-1">
+            <LinhaQtd
+              rotulo={
+                item.entregas.length > 1 ? `Entrega ${e.numero}` : "Entrega"
+              }
+              nomeItem={item.nome}
+              cx={e.cx}
+              un={e.un}
+              unPorCaixa={item.unPorCaixa}
+              aoMudarCx={(v) => mudarEntrega(i, "cx", v)}
+              aoMudarUn={(v) => mudarEntrega(i, "un", v)}
+            />
+            {item.entregas.length > 1 && (
+              <div className="flex items-center gap-2 pl-[84px]">
+                <span className="text-[10px] text-texto-suave uppercase font-semibold">
+                  Data
+                </span>
+                <input
+                  type="date"
+                  className="rounded border border-borda bg-superficie-2 px-2 py-0.5 text-[11px] text-texto outline-none focus:border-acento transition"
+                  value={e.data ?? ""}
+                  onChange={(ev) =>
+                    mudarEntrega(i, "data", ev.target.value)
+                  }
+                  aria-label={`Data da entrega ${e.numero} de ${item.nome}`}
+                />
+              </div>
+            )}
+          </div>
         ))}
 
         {consignacao && (
@@ -789,6 +812,7 @@ function CartaoItem({
             aoMudarCx={(v) => aoMudar({ devolucaoCx: v })}
             aoMudarUn={(v) => aoMudar({ devolucaoUn: v })}
             alerta={excedeu}
+            variante="devolucao"
           />
         )}
       </div>
@@ -825,6 +849,7 @@ function LinhaQtd({
   aoMudarCx,
   aoMudarUn,
   alerta = false,
+  variante,
 }: {
   rotulo: string;
   nomeItem: string;
@@ -834,13 +859,21 @@ function LinhaQtd({
   aoMudarCx: (v: number) => void;
   aoMudarUn: (v: number) => void;
   alerta?: boolean;
+  variante?: "devolucao";
 }) {
   const total = cx * unPorCaixa + un;
+  const isDevolucao = variante === "devolucao";
   return (
-    <div className="flex items-center gap-2">
+    <div
+      className={`flex items-center gap-2 rounded-md px-1.5 py-0.5 -mx-1.5 ${
+        isDevolucao
+          ? "bg-red-50 dark:bg-red-950/30"
+          : ""
+      }`}
+    >
       <span
         className={`w-20 shrink-0 text-[11px] font-bold uppercase ${
-          alerta ? "text-red-600" : "text-texto-suave"
+          alerta || isDevolucao ? "text-red-600 dark:text-red-400" : "text-texto-suave"
         }`}
       >
         {rotulo}
@@ -863,7 +896,11 @@ function LinhaQtd({
           rotulo={`${rotulo} de ${nomeItem} em unidades avulsas`}
         />
       </label>
-      <span className="w-14 shrink-0 text-right text-sm font-bold tabular-nums">
+      <span
+        className={`w-14 shrink-0 text-right text-sm font-bold tabular-nums ${
+          isDevolucao ? "text-red-600 dark:text-red-400" : ""
+        }`}
+      >
         {num(total)}
       </span>
     </div>
