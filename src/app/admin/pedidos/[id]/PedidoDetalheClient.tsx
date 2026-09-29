@@ -341,6 +341,16 @@ function PedidoPageInterno() {
 
         <Resumo pedido={pedido} totais={totais} />
 
+        {/* Atalho pro pagamento sem precisar rolar até o Fechamento. */}
+        {totais.saldoAberto > 0.005 && (
+          <RegistrarPagamento
+            pedido={pedido}
+            totais={totais}
+            aoMudar={atualizar}
+            classeBotao="btn-primario w-full"
+          />
+        )}
+
         {/* ------------------------------- Itens ------------------------------- */}
         <section>
           <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -1798,10 +1808,12 @@ function RegistrarPagamento({
   pedido,
   totais,
   aoMudar,
+  classeBotao = "btn-primario mt-3 w-full",
 }: {
   pedido: Pedido;
   totais: ReturnType<typeof calcularTotais>;
   aoMudar: (m: Partial<Pedido>) => void;
+  classeBotao?: string;
 }) {
   const { salvarPagamento } = useDados();
   const [aberto, setAberto] = useState(false);
@@ -1853,7 +1865,7 @@ function RegistrarPagamento({
 
   return (
     <>
-      <button className="btn-primario mt-3 w-full" onClick={abrir}>
+      <button className={classeBotao} onClick={abrir}>
         <Wallet className="h-4 w-4" />
         Registrar pagamento
       </button>

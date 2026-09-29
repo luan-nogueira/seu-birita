@@ -467,6 +467,22 @@ function EstoquePageInterno() {
     );
   }, [produtosOrdenados, busca]);
 
+  // Valor do que está parado no galpão. Estoque negativo não conta (é erro
+  // de lançamento, não mercadoria) e produto sem custo cadastrado entra como
+  // zero no custo — por isso o aviso com a contagem deles.
+  const valorEstoque = useMemo(() => {
+    let custo = 0;
+    let venda = 0;
+    let semCusto = 0;
+    for (const p of produtosOrdenados) {
+      if (p.estoqueUn <= 0) continue;
+      custo += p.estoqueUn * (p.precoCusto || 0);
+      venda += p.estoqueUn * (p.precoUn || 0);
+      if (!p.precoCusto) semCusto++;
+    }
+    return { custo, venda, semCusto };
+  }, [produtosOrdenados]);
+
   const agrupados = useMemo(() => {
     const mapa = new Map<string, Produto[]>();
     for (const p of visiveis) {
@@ -650,6 +666,32 @@ function EstoquePageInterno() {
       )}
 
       <div className="px-4 md:px-6">
+        <div className={`mb-4 grid gap-2 ${permissoes.verCusto ? "grid-cols-2" : "grid-cols-1"}`}>
+          {permissoes.verCusto && (
+            <div className="card px-4 py-3">
+              <p className="text-[11px] font-semibold tracking-wide text-texto-suave uppercase">
+                Estoque a preço de custo
+              </p>
+              <p className="mt-1 text-xl font-black tabular-nums">
+                {brl(valorEstoque.custo)}
+              </p>
+              {valorEstoque.semCusto > 0 && (
+                <p className="mt-0.5 text-xs text-texto-suave">
+                  {valorEstoque.semCusto} produto(s) sem custo cadastrado
+                </p>
+              )}
+            </div>
+          )}
+          <div className="card px-4 py-3">
+            <p className="text-[11px] font-semibold tracking-wide text-texto-suave uppercase">
+              Estoque a preço de venda
+            </p>
+            <p className="mt-1 text-xl font-black tabular-nums">
+              {brl(valorEstoque.venda)}
+            </p>
+          </div>
+        </div>
+
         <div className="relative mb-4">
           <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-texto-suave" />
           <input
