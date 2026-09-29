@@ -221,73 +221,102 @@ export default function RelatorioPage() {
                 const devCx = consignacao ? item.devolucaoCx || 0 : 0;
                 const devUn = consignacao ? item.devolucaoUn || 0 : 0;
 
-                return (
-                  <tr
-                    key={`${item.produtoId}-${i}`}
-                    className={i % 2 ? "bg-[#fbf6ee]" : "bg-white"}
-                  >
-                    <td className="border-b border-neutral-200 px-2 py-1.5">
-                      <span className="font-semibold">{item.nome}</span>
-                      {item.unPorCaixa > 1 && (
-                        <span className="ml-1.5 text-[10px] text-neutral-500">
-                          ({item.unPorCaixa} un/cx)
-                        </span>
-                      )}
-                      {/* Datas por remessa — só aparece quando há múltiplas entregas com data */}
-                      {item.entregas.length > 1 &&
-                        item.entregas.some((r) => r.data) && (
-                          <div className="mt-0.5 flex flex-wrap gap-x-2 gap-y-0">
-                            {item.entregas.map((r, ri) =>
-                              r.data ? (
-                                <span
-                                  key={ri}
-                                  className="text-[9px] text-neutral-400"
-                                >
-                                  {item.entregas.length > 1
-                                    ? `Entrega ${r.numero}: `
-                                    : ""}
-                                  {dataBR(r.data)}
-                                </span>
-                              ) : null,
-                            )}
-                          </div>
-                        )}
-                    </td>
-                    <td className="border-b border-neutral-200 px-1 py-1.5 text-right tabular-nums text-neutral-500">
-                      {item.unPorCaixa > 1 && entrCx > 0 ? num(entrCx) : "—"}
-                    </td>
-                    <td className="border-b border-neutral-200 px-1 py-1.5 text-right tabular-nums text-neutral-500">
-                      {item.unPorCaixa > 1 && entrUn > 0 ? num(entrUn) : "—"}
-                    </td>
-                    <td className="border-b border-neutral-200 px-1 py-1.5 text-right font-semibold tabular-nums">
-                      {num(entregue)}
-                    </td>
+                // Determina se deve expandir por remessa (múltiplas entregas com data)
+                const temDatas =
+                  item.entregas.length > 1 && item.entregas.some((r) => r.data);
 
-                    {consignacao && (
-                      <>
-                        <td className="border-b border-neutral-200 px-1 py-1.5 text-right tabular-nums text-neutral-400">
-                          {item.unPorCaixa > 1 && devCx > 0 ? num(devCx) : "—"}
-                        </td>
-                        <td className="border-b border-neutral-200 px-1 py-1.5 text-right tabular-nums text-neutral-400">
-                          {item.unPorCaixa > 1 && devUn > 0 ? num(devUn) : "—"}
-                        </td>
-                        <td className="border-b border-neutral-200 px-1 py-1.5 text-right tabular-nums text-neutral-600">
-                          {devolvido > 0 ? num(devolvido) : "—"}
-                        </td>
-                      </>
-                    )}
-                    <td className="border-b border-neutral-200 px-2 py-1.5 text-right font-bold tabular-nums">
-                      {num(saldo)}
-                    </td>
-                    <td className="border-b border-neutral-200 px-2 py-1.5 text-right tabular-nums">
-                      {brl(item.precoUn)}
-                    </td>
-                    <td className="border-b border-neutral-200 px-2 py-1.5 text-right font-bold tabular-nums">
-                      {brlOuTraco(valorFinalItem(item, pedido.tipo))}
-                    </td>
-                  </tr>
+                const rowBg = i % 2 ? "bg-[#fbf6ee]" : "bg-white";
+
+                return (
+                  <>
+                    {/* Linha principal do produto */}
+                    <tr
+                      key={`${item.produtoId}-${i}`}
+                      className={rowBg}
+                    >
+                      <td className="border-b border-neutral-200 px-2 py-1.5">
+                        <span className="font-semibold">{item.nome}</span>
+                        {item.unPorCaixa > 1 && (
+                          <span className="ml-1.5 text-[10px] text-neutral-500">
+                            ({item.unPorCaixa} un/cx)
+                          </span>
+                        )}
+                      </td>
+                      <td className="border-b border-neutral-200 px-1 py-1.5 text-right tabular-nums text-neutral-500">
+                        {item.unPorCaixa > 1 && entrCx > 0 ? num(entrCx) : "—"}
+                      </td>
+                      <td className="border-b border-neutral-200 px-1 py-1.5 text-right tabular-nums text-neutral-500">
+                        {item.unPorCaixa > 1 && entrUn > 0 ? num(entrUn) : "—"}
+                      </td>
+                      <td className="border-b border-neutral-200 px-1 py-1.5 text-right font-semibold tabular-nums">
+                        {num(entregue)}
+                      </td>
+
+                      {consignacao && (
+                        <>
+                          <td className="border-b border-neutral-200 px-1 py-1.5 text-right tabular-nums text-neutral-400">
+                            {item.unPorCaixa > 1 && devCx > 0 ? num(devCx) : "—"}
+                          </td>
+                          <td className="border-b border-neutral-200 px-1 py-1.5 text-right tabular-nums text-neutral-400">
+                            {item.unPorCaixa > 1 && devUn > 0 ? num(devUn) : "—"}
+                          </td>
+                          <td className="border-b border-neutral-200 px-1 py-1.5 text-right tabular-nums text-neutral-600">
+                            {devolvido > 0 ? num(devolvido) : "—"}
+                          </td>
+                        </>
+                      )}
+                      <td className="border-b border-neutral-200 px-2 py-1.5 text-right font-bold tabular-nums">
+                        {num(saldo)}
+                      </td>
+                      <td className="border-b border-neutral-200 px-2 py-1.5 text-right tabular-nums">
+                        {brl(item.precoUn)}
+                      </td>
+                      <td className="border-b border-neutral-200 px-2 py-1.5 text-right font-bold tabular-nums">
+                        {brlOuTraco(valorFinalItem(item, pedido.tipo))}
+                      </td>
+                    </tr>
+
+                    {/* Sub-linhas por remessa — só quando há datas registradas */}
+                    {temDatas &&
+                      item.entregas.map((r, ri) => {
+                        const remUn = r.cx * item.unPorCaixa + r.un;
+                        return (
+                          <tr
+                            key={`${item.produtoId}-${i}-remessa-${ri}`}
+                            className={rowBg}
+                          >
+                            <td className="border-b border-neutral-100 py-1 pl-5 pr-2 text-[9.5px] text-neutral-500 italic">
+                              {r.data
+                                ? `Entrega ${r.numero} · ${dataBR(r.data)}`
+                                : `Entrega ${r.numero}`}
+                            </td>
+                            <td className="border-b border-neutral-100 px-1 py-1 text-right text-[9.5px] tabular-nums text-neutral-400">
+                              {item.unPorCaixa > 1 && r.cx > 0 ? num(r.cx) : "—"}
+                            </td>
+                            <td className="border-b border-neutral-100 px-1 py-1 text-right text-[9.5px] tabular-nums text-neutral-400">
+                              {item.unPorCaixa > 1 && r.un > 0 ? num(r.un) : "—"}
+                            </td>
+                            <td className="border-b border-neutral-100 px-1 py-1 text-right text-[9.5px] tabular-nums text-neutral-500">
+                              {num(remUn)}
+                            </td>
+                            {/* Colunas de devolução e totais vazias nas sub-linhas */}
+                            {consignacao && (
+                              <>
+                                <td className="border-b border-neutral-100 py-1" />
+                                <td className="border-b border-neutral-100 py-1" />
+                                <td className="border-b border-neutral-100 py-1" />
+                              </>
+                            )}
+                            <td className="border-b border-neutral-100 py-1" />
+                            <td className="border-b border-neutral-100 py-1" />
+                            <td className="border-b border-neutral-100 py-1" />
+                          </tr>
+                        );
+                      })}
+                  </>
                 );
               })}
+
             </tbody>
           ))}
 
