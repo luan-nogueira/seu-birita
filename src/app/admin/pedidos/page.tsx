@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClipboardList, Plus, Search } from "lucide-react";
@@ -326,31 +326,16 @@ function ModalNovoPedido({
             Cliente
           </label>
           {novoCliente === null ? (
-            <select
-              id="np-cliente"
-              className="campo"
-              value={clienteId}
-              onChange={(e) => {
-                if (e.target.value === "__novo__") {
-                  setClienteId("");
-                  setNovoCliente({ nome: "", telefone: "" });
-                } else {
-                  setClienteId(e.target.value);
-                }
+            <ComboCliente
+              clientes={clientes.filter((c) => c.ativo)}
+              valor={clienteId}
+              aoSelecionar={(id) => setClienteId(id)}
+              podeCadastrar={permissoes.clientes}
+              aoCadastrarNovo={() => {
+                setClienteId("");
+                setNovoCliente({ nome: "", telefone: "" });
               }}
-            >
-              <option value="">Selecione…</option>
-              {clientes
-                .filter((c) => c.ativo)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nome}
-                  </option>
-                ))}
-              {permissoes.clientes && (
-                <option value="__novo__">+ Cadastrar novo cliente</option>
-              )}
-            </select>
+            />
           ) : (
             <div className="space-y-2">
               <input
@@ -472,5 +457,112 @@ function BotaoTipo({
       <span className="block text-sm font-bold">{titulo}</span>
       <span className="mt-0.5 block text-xs text-texto-suave">{descricao}</span>
     </button>
+  );
+}
+
+function ComboCliente({
+  clientes,
+  valor,
+  aoSelecionar,
+  podeCadastrar,
+  aoCadastrarNovo,
+}: {
+  clientes: { id: string; nome: string }[];
+  valor: string;
+  aoSelecionar: (id: string) => void;
+  podeCadastrar: boolean;
+  aoCadastrarNovo: () => void;
+}) {
+  const clienteSelecionado = clientes.find((c) => c.id === valor);
+  const [busca, setBusca] = useState("");
+  const [aberto, setAberto] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const filtrados = useMemo(() => {
+    const termo = normalizar(busca);
+    if (!termo) return clientes;
+    return clientes.filter((c) => normalizar(c.nome).includes(termo));
+  }, [clientes, busca]);
+
+  function abrir() {
+    setBusca("");
+    setAberto(true);
+  }
+
+  function selecionar(id: string) {
+    aoSelecionar(id);
+    setAberto(false);
+    setBusca("");
+  }
+
+  function fechar() {
+    setAberto(false);
+    setBusca("");
+  }
+
+  return (
+    <div ref={containerRef} className="relative" id="np-cliente">
+      {/* Campo de disparo */}
+      {!aberto ? (
+        <button
+          type="button"
+          onClick={abrir}
+          className="campo flex w-full items-center justify-between text-left"
+        >
+          <span className={clienteSelecionado ? "" : "text-texto-suave"}>
+            {clienteSelecionado ? clienteSelecionado.nome : "Selecione…"}
+          </span>
+          <svg className="h-4 w-4 shrink-0 text-texto-suave" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+          </svg>
+        </button>
+      ) : (
+        <input
+          autoFocus
+          type="text"
+          className="campo w-full"
+          placeholder="Buscar cliente…"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          onKeyDown={(e) => e.key === "Escape" && fechar()}
+          onBlur={(e) => {
+            // Fecha só se o clique não foi dentro do dropdown
+            if (!containerRef.current?.contains(e.relatedTarget as Node)) {
+              fechar();
+            }
+          }}
+        />
+      )}
+
+      {/* Dropdown */}
+      {aberto && (
+        <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-56 overflow-y-auto rounded-xl border border-borda bg-superficie shadow-xl">
+          {filtrados.length === 0 && (
+            <p className="px-3 py-2 text-sm text-texto-suave">Nenhum cliente encontrado</p>
+          )}
+          {filtrados.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className="flex w-full items-center px-3 py-2.5 text-left text-sm font-medium transition hover:bg-superficie-2 focus:bg-superficie-2 focus:outline-none"
+              onMouseDown={(e) => e.preventDefault()} // evita blur antes do click
+              onClick={() => selecionar(c.id)}
+            >
+              {c.nome}
+            </button>
+          ))}
+          {podeCadastrar && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-1.5 border-t border-borda px-3 py-2.5 text-left text-sm font-semibold text-acento transition hover:bg-superficie-2 focus:outline-none"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { fechar(); aoCadastrarNovo(); }}
+            >
+              + Cadastrar novo cliente
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
