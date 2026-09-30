@@ -16,6 +16,15 @@ export function precoDaTabela(produto: Produto, tabela: 1 | 2 | 3): number {
   return precoNaTabela(produto, tabela) ?? produto.precoUn;
 }
 
+/**
+ * Produto com mercadoria no galpão mas sem preço de custo — entra como zero
+ * no valor do estoque. Estoque e Produtos usam a mesma regra pra contagem
+ * do aviso bater com a lista filtrada.
+ */
+export function semCustoNoEstoque(produto: Produto): boolean {
+  return produto.ativo && produto.estoqueUn > 0 && !produto.precoCusto;
+}
+
 /** Lê "?tabela=2" da URL — só aceita 2 ou 3, qualquer outra coisa é Tabela 1. */
 export function tabelaDaUrl(valor: string | null): 1 | 2 | 3 {
   if (valor === "2") return 2;

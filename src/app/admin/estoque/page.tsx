@@ -7,7 +7,8 @@ import { useDados } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { novoId } from "@/lib/db";
 import { brl, caixasEUnidades, dataBR, dataHoraBR, hojeISO, normalizar } from "@/lib/format";
-import { compararCategorias } from "@/lib/calc";
+import { compararCategorias, semCustoNoEstoque } from "@/lib/calc";
+import Link from "next/link";
 import {
   AlertTriangle,
   ArrowDown,
@@ -395,6 +396,7 @@ function EstoquePageInterno() {
   } = useDados();
 
   const [busca, setBusca] = useState("");
+  const [soSemCusto, setSoSemCusto] = useState(false);
   const [produtoHistorico, setProdutoHistorico] = useState<Produto | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -463,9 +465,11 @@ function EstoquePageInterno() {
   const visiveis = useMemo(() => {
     const termo = normalizar(busca);
     return produtosOrdenados.filter(
-      (p) => !termo || normalizar(p.nome).includes(termo) || normalizar(p.categoria).includes(termo),
+      (p) =>
+        (!soSemCusto || semCustoNoEstoque(p)) &&
+        (!termo || normalizar(p.nome).includes(termo) || normalizar(p.categoria).includes(termo)),
     );
-  }, [produtosOrdenados, busca]);
+  }, [produtosOrdenados, busca, soSemCusto]);
 
   // Valor do que está parado no galpão. Estoque negativo não conta (é erro
   // de lançamento, não mercadoria) e produto sem custo cadastrado entra como
@@ -478,7 +482,7 @@ function EstoquePageInterno() {
       if (p.estoqueUn <= 0) continue;
       custo += p.estoqueUn * (p.precoCusto || 0);
       venda += p.estoqueUn * (p.precoUn || 0);
-      if (!p.precoCusto) semCusto++;
+      if (semCustoNoEstoque(p)) semCusto++;
     }
     return { custo, venda, semCusto };
   }, [produtosOrdenados]);
@@ -676,9 +680,13 @@ function EstoquePageInterno() {
                 {brl(valorEstoque.custo)}
               </p>
               {valorEstoque.semCusto > 0 && (
-                <p className="mt-0.5 text-xs text-texto-suave">
-                  {valorEstoque.semCusto} produto(s) sem custo cadastrado
-                </p>
+                <button
+                  type="button"
+                  onClick={() => setSoSemCusto(true)}
+                  className="mt-0.5 text-left text-xs font-semibold text-acento underline underline-offset-2"
+                >
+                  {valorEstoque.semCusto} produto(s) sem custo cadastrado — ver quais
+                </button>
               )}
             </div>
           )}
@@ -691,6 +699,29 @@ function EstoquePageInterno() {
             </p>
           </div>
         </div>
+
+        {soSemCusto && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-ouro-300 bg-ouro-50 px-4 py-3 text-sm dark:bg-ouro-900/20">
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold">Só os produtos sem custo</span>
+              <span className="block text-xs text-texto-suave">
+                O custo se cadastra em Produtos, no lápis de cada um.
+              </span>
+            </span>
+            {permissoes.produtos && (
+              <Link href="/admin/produtos?semCusto=1" className="btn-primario shrink-0 text-xs">
+                Cadastrar custos
+              </Link>
+            )}
+            <button
+              type="button"
+              className="btn-secundario shrink-0 text-xs"
+              onClick={() => setSoSemCusto(false)}
+            >
+              Mostrar todos
+            </button>
+          </div>
+        )}
 
         <div className="relative mb-4">
           <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-texto-suave" />
@@ -707,7 +738,11 @@ function EstoquePageInterno() {
             <div className="grid h-14 w-14 place-items-center rounded-2xl bg-superficie-2 text-texto-suave">
               <Boxes className="h-7 w-7" />
             </div>
-            <p className="font-bold">Nenhum produto encontrado</p>
+            <p className="font-bold">
+              {soSemCusto
+                ? "Todos os produtos em estoque já têm custo"
+                : "Nenhum produto encontrado"}
+            </p>
           </div>
         ) : (
           <div className="space-y-6">
@@ -731,6 +766,11 @@ function EstoquePageInterno() {
                         >
                           <div className="min-w-0 flex-1">
                             <p className="truncate font-semibold">{p.nome}</p>
+                            {permissoes.verCusto && semCustoNoEstoque(p) && (
+                              <span className="mt-0.5 inline-block rounded-full bg-acento/15 px-2 py-0.5 text-[10px] font-bold text-acento uppercase">
+                                sem custo
+                              </span>
+                            )}
                             {p.unPorCaixa > 1 && (
                               <p className="text-xs text-texto-suave">{p.unPorCaixa} un/cx</p>
                             )}

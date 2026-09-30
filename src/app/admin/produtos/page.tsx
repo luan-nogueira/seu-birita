@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Boxes,
   Download,
@@ -19,7 +20,7 @@ import { useDados, novoId } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { firebaseConfigurado } from "@/lib/firebase";
 import { brl, dataBR, normalizar, paraCampo, paraNumero } from "@/lib/format";
-import { compararCategorias } from "@/lib/calc";
+import { compararCategorias, semCustoNoEstoque } from "@/lib/calc";
 import { CATEGORIAS_PADRAO, semearProdutos } from "@/lib/db/seed";
 import type { Produto } from "@/lib/types";
 
@@ -54,9 +55,12 @@ const FORM_VAZIO: Formulario = {
 };
 
 export default function ProdutosPage() {
+  // O Suspense é exigido pelo useSearchParams (?semCusto=1) numa página estática.
   return (
     <Protegido chave="produtos">
-      <ProdutosPageInterno />
+      <Suspense fallback={<p className="p-6 text-sm text-texto-suave">Carregando…</p>}>
+        <ProdutosPageInterno />
+      </Suspense>
     </Protegido>
   );
 }
@@ -64,6 +68,11 @@ export default function ProdutosPage() {
 function ProdutosPageInterno() {
   const { produtos, salvarProduto, removerProduto, carregando, movimentos } = useDados();
   const { permissoes } = useAuth();
+  const router = useRouter();
+
+  // Vem do atalho "Cadastrar custos" do Estoque: lista só quem tem
+  // mercadoria no galpão e ainda não tem preço de custo.
+  const soSemCusto = useSearchParams().get("semCusto") === "1" && permissoes.verCusto;
 
   const [busca, setBusca] = useState("");
   const [editando, setEditando] = useState<Produto | null>(null);
@@ -152,13 +161,14 @@ function ProdutosPageInterno() {
 
   const filtrados = useMemo(() => {
     const termo = normalizar(busca);
-    if (!termo) return produtos;
-    return produtos.filter(
+    const base = soSemCusto ? produtos.filter(semCustoNoEstoque) : produtos;
+    if (!termo) return base;
+    return base.filter(
       (p) =>
         normalizar(p.nome).includes(termo) ||
         normalizar(p.categoria).includes(termo),
     );
-  }, [produtos, busca]);
+  }, [produtos, busca, soSemCusto]);
 
   const agrupados = useMemo(() => {
     const mapa = new Map<string, Produto[]>();
@@ -296,9 +306,37 @@ function ProdutosPageInterno() {
             onChange={(e) => setBusca(e.target.value)}
           />
         </div>
+
+        {soSemCusto && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-ouro-300 bg-ouro-50 px-4 py-3 text-sm dark:bg-ouro-900/20">
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold">
+                {filtrados.length} produto(s) em estoque sem custo
+              </span>
+              <span className="block text-xs text-texto-suave">
+                Toque no lápis e preencha o Preço de custo — ao salvar, o produto sai desta lista.
+              </span>
+            </span>
+            <button
+              type="button"
+              className="btn-secundario shrink-0 text-xs"
+              onClick={() => router.replace("/admin/produtos")}
+            >
+              Mostrar todos
+            </button>
+          </div>
+        )}
       </div>
 
-      {!carregando && filtrados.length === 0 && (
+      {!carregando && filtrados.length === 0 && soSemCusto && !busca && (
+        <Vazio
+          Icone={Package}
+          titulo="Tudo com custo cadastrado"
+          descricao="Todos os produtos em estoque já têm preço de custo."
+        />
+      )}
+
+      {!carregando && filtrados.length === 0 && !(soSemCusto && !busca) && (
         <Vazio
           Icone={Package}
           titulo={busca ? "Nada encontrado" : "Nenhum produto ainda"}
@@ -350,6 +388,11 @@ function ProdutosPageInterno() {
                           className="h-3.5 w-3.5 shrink-0 text-texto-suave"
                           aria-label="Oculto na tabela pública"
                         />
+                      )}
+                      {permissoes.verCusto && semCustoNoEstoque(p) && (
+                        <span className="shrink-0 rounded-full bg-acento/15 px-2 py-0.5 text-[10px] font-bold text-acento uppercase">
+                          sem custo
+                        </span>
                       )}
                     </div>
                     <p className="mt-0.5 text-xs text-texto-suave">
