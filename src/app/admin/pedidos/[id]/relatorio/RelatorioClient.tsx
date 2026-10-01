@@ -268,25 +268,12 @@ export default function RelatorioPage() {
                       <td className="border-b border-neutral-200 px-2 py-1.5 text-right font-bold tabular-nums">
                         {num(saldo)}
                       </td>
-                      {ehComodato(item) ? (
-                        <>
-                          <td className="border-b border-neutral-200 px-2 py-1.5 text-right text-[10px] text-neutral-500">
-                            Comodato
-                          </td>
-                          <td className="border-b border-neutral-200 px-2 py-1.5 text-right tabular-nums">
-                            —
-                          </td>
-                        </>
-                      ) : (
-                        <>
-                          <td className="border-b border-neutral-200 px-2 py-1.5 text-right tabular-nums">
-                            {brl(item.precoUn)}
-                          </td>
-                          <td className="border-b border-neutral-200 px-2 py-1.5 text-right font-bold tabular-nums">
-                            {brlOuTraco(valorFinalItem(item, pedido.tipo))}
-                          </td>
-                        </>
-                      )}
+                      <td className="border-b border-neutral-200 px-2 py-1.5 text-right tabular-nums">
+                        {brl(item.precoUn)}
+                      </td>
+                      <td className="border-b border-neutral-200 px-2 py-1.5 text-right font-bold tabular-nums">
+                        {brlOuTraco(valorFinalItem(item, pedido.tipo))}
+                      </td>
                     </tr>
 
                     {/* Sub-linhas por remessa — só quando há datas registradas */}

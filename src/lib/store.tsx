@@ -62,7 +62,7 @@ interface Dados {
   produtoPorId: (id: string) => Produto | undefined;
   clientePorId: (id: string) => Cliente | undefined;
   pedidoPorId: (id: string) => Pedido | undefined;
-  /** Item de comodato/estrutura: vai no pedido, mas não é cobrado (ver calcularTotais). */
+  /** Item de comodato/estrutura: cobrado, mas separado da mercadoria e fora do lucro (ver calcularTotais). */
   ehComodato: EhComodato;
   /** Soma do que o cliente ainda deve em pedidos não finalizados. */
   pendenciaDoCliente: (clienteId: string, ignorarPedidoId?: string) => number;

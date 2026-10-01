@@ -407,7 +407,6 @@ function PedidoPageInterno() {
                           key={`${item.produtoId}-${indice}`}
                           item={item}
                           consignacao={consignacao}
-                          comodato={ehComodato(item)}
                           aoMudar={(m) => atualizarItem(indice, m)}
                           aoRemover={() => pedirRemocaoItem(indice)}
                         />
@@ -717,17 +716,25 @@ function Resumo({
   const consignacao = pedido.tipo === "CONSIGNACAO";
   const { permissoes } = useAuth();
 
+  // Comodato tem quadro próprio: os outros mostram só a mercadoria, e o
+  // "A receber" soma os dois.
+  const temComodato = totais.unidadesComodatoEntregues > 0;
+  const mercadoriaEntregue = totais.valorPedido - totais.valorPedidoComodato;
+  const mercadoriaConsumo = totais.valorFinal - totais.valorComodato;
+  const unEntregues = totais.unidadesEntregues - totais.unidadesComodatoEntregues;
+  const unDevolvidas = totais.unidadesDevolvidas - totais.unidadesComodatoDevolvidas;
+
   return (
-    <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+    <div className={`grid grid-cols-2 gap-2 ${temComodato ? "lg:grid-cols-6" : "lg:grid-cols-5"}`}>
       <div className="card px-4 py-3">
         <p className="text-[11px] font-semibold tracking-wide text-texto-suave uppercase">
           Mercadoria entregue
         </p>
         <p className="mt-1 text-xl font-black tabular-nums">
-          {brl(totais.valorPedido)}
+          {brl(mercadoriaEntregue)}
         </p>
         <p className="mt-0.5 text-xs text-texto-suave">
-          {num(totais.unidadesEntregues)} un
+          {num(unEntregues)} un
         </p>
       </div>
 
@@ -737,10 +744,10 @@ function Resumo({
             Devolvido
           </p>
           <p className="mt-1 text-xl font-black tabular-nums">
-            {brl(totais.valorPedido - totais.valorFinal)}
+            {brl(mercadoriaEntregue - mercadoriaConsumo)}
           </p>
           <p className="mt-0.5 text-xs text-texto-suave">
-            {num(totais.unidadesDevolvidas)} un
+            {num(unDevolvidas)} un
           </p>
         </div>
       )}
@@ -750,12 +757,26 @@ function Resumo({
           {consignacao ? "Consumo" : "Total vendido"}
         </p>
         <p className="mt-1 text-xl font-black tabular-nums">
-          {brl(totais.valorFinal)}
+          {brl(mercadoriaConsumo)}
         </p>
         <p className="mt-0.5 text-xs text-texto-suave">
-          {num(totais.unidadesConsumidas)} un
+          {num(unEntregues - unDevolvidas)} un
         </p>
       </div>
+
+      {temComodato && (
+        <div className="card px-4 py-3">
+          <p className="text-[11px] font-semibold tracking-wide text-texto-suave uppercase">
+            Comodato
+          </p>
+          <p className="mt-1 text-xl font-black tabular-nums">
+            {brl(totais.valorComodato)}
+          </p>
+          <p className="mt-0.5 text-xs text-texto-suave">
+            {num(totais.unidadesComodatoEntregues - totais.unidadesComodatoDevolvidas)} un
+          </p>
+        </div>
+      )}
 
       <div
         className={`card px-4 py-3 ${
@@ -804,14 +825,11 @@ function Resumo({
 function CartaoItem({
   item,
   consignacao,
-  comodato,
   aoMudar,
   aoRemover,
 }: {
   item: PedidoItem;
   consignacao: boolean;
-  /** Comodato/estrutura: vai e volta, mas não é cobrado. */
-  comodato: boolean;
   aoMudar: (m: Partial<PedidoItem>) => void;
   aoRemover: () => void;
 }) {
@@ -839,17 +857,10 @@ function CartaoItem({
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <p className="font-bold leading-tight">{item.nome}</p>
-          {comodato ? (
-            <p className="mt-0.5 text-xs text-texto-suave">
-              Comodato · não cobrado
-              {item.unPorCaixa > 1 && ` · ${item.unPorCaixa} un/cx`}
-            </p>
-          ) : (
-            <div className="mt-0.5 flex flex-wrap items-center gap-2">
-              <CampoPrecoInline valor={item.precoUn} aoMudar={(v) => aoMudar({ precoUn: v })} />
-              <span className="text-xs text-texto-suave">/un {item.unPorCaixa > 1 && ` · ${item.unPorCaixa} un/cx`}</span>
-            </div>
-          )}
+          <div className="mt-0.5 flex flex-wrap items-center gap-2">
+            <CampoPrecoInline valor={item.precoUn} aoMudar={(v) => aoMudar({ precoUn: v })} />
+            <span className="text-xs text-texto-suave">/un {item.unPorCaixa > 1 && ` · ${item.unPorCaixa} un/cx`}</span>
+          </div>
         </div>
         <button
           onClick={aoRemover}
@@ -931,13 +942,11 @@ function CartaoItem({
         </span>
         <span className="text-right">
           <span className="text-sm text-texto-suave tabular-nums">
-            {num(saldo)} un{!comodato && " · "}
+            {num(saldo)} un ·{" "}
           </span>
-          {!comodato && (
-            <span className="font-black tabular-nums">
-              {brl(valorFinalItem(item, tipo))}
-            </span>
-          )}
+          <span className="font-black tabular-nums">
+            {brl(valorFinalItem(item, tipo))}
+          </span>
         </span>
       </div>
     </li>
@@ -1057,7 +1066,6 @@ function TabelaItens({
   aoMudarItem: (i: number, m: Partial<PedidoItem>) => void;
   aoRemoverItem: (i: number) => void;
 }) {
-  const { ehComodato } = useDados();
   const tipo = consignacao ? "CONSIGNACAO" : "VENDA_DIRETA";
   const colunasRemessa = Array.from({ length: remessas }, (_, i) => i);
   // Coluna da sobra importada só aparece quando algum item tem sobra.
@@ -1277,31 +1285,17 @@ function TabelaItens({
                 <td className="border-l border-borda px-3 py-2 text-right font-bold tabular-nums">
                   {num(saldo)}
                 </td>
-                {ehComodato(item) ? (
-                  <>
-                    <td className="px-3 py-2 text-right text-xs text-texto-suave">
-                      Comodato
-                    </td>
-                    <td className="px-3 py-2 text-right text-texto-suave">—</td>
-                    <td className="px-3 py-2 text-right text-xs text-texto-suave">
-                      não cobrado
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td className="px-3 py-2 text-right">
-                      <div className="flex justify-end">
-                        <CampoPrecoInline valor={item.precoUn} aoMudar={(v) => aoMudarItem(indice, { precoUn: v })} />
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 text-right text-texto-suave tabular-nums">
-                      {brlOuTraco(valorPedidoItem(item))}
-                    </td>
-                    <td className="px-3 py-2 text-right font-bold tabular-nums">
-                      {brlOuTraco(valorFinalItem(item, tipo))}
-                    </td>
-                  </>
-                )}
+                <td className="px-3 py-2 text-right">
+                  <div className="flex justify-end">
+                    <CampoPrecoInline valor={item.precoUn} aoMudar={(v) => aoMudarItem(indice, { precoUn: v })} />
+                  </div>
+                </td>
+                <td className="px-3 py-2 text-right text-texto-suave tabular-nums">
+                  {brlOuTraco(valorPedidoItem(item))}
+                </td>
+                <td className="px-3 py-2 text-right font-bold tabular-nums">
+                  {brlOuTraco(valorFinalItem(item, tipo))}
+                </td>
                 <td className="px-2 py-2">
                   <button
                     onClick={() => aoRemoverItem(indice)}
@@ -2069,10 +2063,6 @@ function CompartilharWhatsApp({ pedido }: { pedido: Pedido }) {
     for (const item of pedido.itens) {
       const saldo = saldoUn(item, pedido.tipo);
       if (saldo <= 0) continue;
-      if (ehComodato(item)) {
-        linhas.push(`• ${item.nome}: ${num(saldo)} un (comodato)`);
-        continue;
-      }
       linhas.push(
         `• ${item.nome}: ${num(saldo)} un × ${brl(item.precoUn)} = ${brl(
           valorFinalItem(item, pedido.tipo),

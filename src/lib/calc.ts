@@ -82,10 +82,16 @@ export function valorFinalItem(item: PedidoItem, tipo: PedidoTipo): number {
 }
 
 export interface TotaisPedido {
-  /** Total da mercadoria entregue. */
+  /** Total entregue (mercadoria + comodato). */
   valorPedido: number;
-  /** Total consumido pelo cliente. */
+  /** Total cobrado do cliente (mercadoria + comodato). */
   valorFinal: number;
+  /** Parte do valorPedido que é comodato/estrutura. */
+  valorPedidoComodato: number;
+  /** Parte do valorFinal que é comodato/estrutura — cobrada, mas fora do lucro. */
+  valorComodato: number;
+  unidadesComodatoEntregues: number;
+  unidadesComodatoDevolvidas: number;
   desconto: number;
   pendenciaAnterior: number;
   /** valorFinal - desconto + pendenciaAnterior */
@@ -99,7 +105,7 @@ export interface TotaisPedido {
   unidadesConsumidas: number;
   /** Custo da mercadoria consumida (sem comodato/estrutura). */
   custoTotal: number;
-  /** valorFinal - desconto - custoTotal */
+  /** valorFinal - valorComodato - desconto - custoTotal */
   lucro: number;
 }
 
@@ -107,10 +113,10 @@ export interface TotaisPedido {
 export type EhComodato = (item: PedidoItem) => boolean;
 
 /**
- * Comodato e estrutura (bags, bistrôs, caixa térmica…) são emprestados pro
- * evento e voltam: vão no pedido pra controlar a ida e a volta, mas não são
- * cobrados do cliente nem entram no lucro. A categoria vem do cadastro do
- * produto, que o item não guarda.
+ * Comodato e estrutura (bags, bistrôs, caixa térmica…) são aluguel de
+ * equipamento, não revenda: o cliente paga normalmente, mas o valor aparece
+ * separado da mercadoria e fica fora do lucro (custo zero inflava a margem).
+ * A categoria vem do cadastro do produto, que o item não guarda.
  */
 export function comodatoPorCategoria(
   produtoPorId: (id: string) => Produto | undefined,
@@ -126,14 +132,24 @@ export function calcularTotais(pedido: Pedido, ehComodato: EhComodato): TotaisPe
   let unidadesEntregues = 0;
   let unidadesDevolvidas = 0;
   let custoTotal = 0;
+  let valorPedidoComodato = 0;
+  let valorComodato = 0;
+  let unidadesComodatoEntregues = 0;
+  let unidadesComodatoDevolvidas = 0;
 
   for (const item of itens) {
-    unidadesEntregues += entregueUn(item);
-    unidadesDevolvidas += devolvidoUn(item, tipo);
-    if (ehComodato(item)) continue;
     valorPedido += valorPedidoItem(item);
     valorFinal += valorFinalItem(item, tipo);
-    custoTotal += saldoUn(item, tipo) * (item.custoUn || 0);
+    unidadesEntregues += entregueUn(item);
+    unidadesDevolvidas += devolvidoUn(item, tipo);
+    if (ehComodato(item)) {
+      valorPedidoComodato += valorPedidoItem(item);
+      valorComodato += valorFinalItem(item, tipo);
+      unidadesComodatoEntregues += entregueUn(item);
+      unidadesComodatoDevolvidas += devolvidoUn(item, tipo);
+    } else {
+      custoTotal += saldoUn(item, tipo) * (item.custoUn || 0);
+    }
   }
 
   const desconto = pedido.desconto || 0;
@@ -144,6 +160,10 @@ export function calcularTotais(pedido: Pedido, ehComodato: EhComodato): TotaisPe
   return {
     valorPedido,
     valorFinal,
+    valorPedidoComodato,
+    valorComodato,
+    unidadesComodatoEntregues,
+    unidadesComodatoDevolvidas,
     desconto,
     pendenciaAnterior,
     totalReceber,
@@ -154,13 +174,13 @@ export function calcularTotais(pedido: Pedido, ehComodato: EhComodato): TotaisPe
     unidadesDevolvidas,
     unidadesConsumidas: unidadesEntregues - unidadesDevolvidas,
     custoTotal,
-    lucro: valorFinal - desconto - custoTotal,
+    lucro: valorFinal - valorComodato - desconto - custoTotal,
   };
 }
 
-/** Margem de lucro sobre o que o cliente paga (lucro ÷ valor líquido), em %. */
+/** Margem de lucro sobre a mercadoria que o cliente paga (lucro ÷ valor líquido), em %. */
 export function margemLucro(t: TotaisPedido): number {
-  const receita = t.valorFinal - t.desconto;
+  const receita = t.valorFinal - t.valorComodato - t.desconto;
   if (receita <= 0) return 0;
   return (t.lucro / receita) * 100;
 }

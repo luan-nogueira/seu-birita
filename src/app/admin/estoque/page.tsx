@@ -930,7 +930,9 @@ function EstoquePageInterno() {
 
       {produtoHistorico && (
         <ModalHistorico
-          produto={produtoHistorico}
+          // Pega o produto atual do banco: o guardado no clique ficava com o
+          // estoque antigo depois de editar uma compra aqui dentro.
+          produto={produtoPorId(produtoHistorico.id) ?? produtoHistorico}
           movimentos={movimentos.filter((m) => m.produtoId === produtoHistorico.id)}
           aoFechar={() => setProdutoHistorico(null)}
         />
