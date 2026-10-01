@@ -31,6 +31,8 @@ import {
   devolvidoUn,
   efeitoEstoque,
   entregueUn,
+  margemLucro,
+  pedidoContabilizado,
   sobraUn,
   novoItem,
   precoDaTabela,
@@ -59,7 +61,8 @@ import type {
 
 // "Aguardando acerto" = a devolução do evento já foi conferida e lançada,
 // falta só fechar a conta com o cliente. Também entra sozinho quando um
-// rascunho recebe pagamento parcial.
+// rascunho/entregue recebe pagamento parcial. É a partir dele que o pedido
+// conta no Financeiro, no painel e baixa o estoque (pedidoContabilizado).
 const STATUS_DISPONIVEIS: PedidoStatus[] = [
   "RASCUNHO",
   "ENTREGUE",
@@ -335,7 +338,7 @@ function PedidoPageInterno() {
       <div className="space-y-5 px-4 py-5 md:px-6">
         <BarraStatus
           pedido={pedido}
-          aoMudarStatus={(status) => atualizar({ status })}
+          aoMudar={atualizar}
           aoMudarTipo={(tipo) => atualizar({ tipo })}
         />
 
@@ -528,15 +531,21 @@ function IndicadorSalvamento({ salvando }: { salvando: boolean }) {
 
 function BarraStatus({
   pedido,
-  aoMudarStatus,
+  aoMudar,
   aoMudarTipo,
 }: {
   pedido: Pedido;
-  aoMudarStatus: (s: PedidoStatus) => void;
+  aoMudar: (m: Partial<Pedido>) => void;
   aoMudarTipo: (t: PedidoTipo) => void;
 }) {
+  const { pagamentos, removerPagamento } = useDados();
   const [aviso, setAviso] = useState("");
   const [trocandoTipo, setTrocandoTipo] = useState(false);
+  // Status pra onde se quer voltar (Rascunho/Entregue/Cancelado) num pedido
+  // que já tem pagamento — espera confirmar que os pagamentos serão apagados.
+  const [voltandoPara, setVoltandoPara] = useState<PedidoStatus | null>(null);
+  const [apagandoPagamentos, setApagandoPagamentos] = useState(false);
+  const pagamentosDoPedido = pagamentos.filter((p) => p.pedidoId === pedido.id);
   const novoTipo: PedidoTipo =
     pedido.tipo === "CONSIGNACAO" ? "VENDA_DIRETA" : "CONSIGNACAO";
   const temDevolucao = pedido.itens.some((i) => i.devolucaoCx > 0 || i.devolucaoUn > 0);
@@ -553,7 +562,32 @@ function BarraStatus({
       return;
     }
     setAviso("");
-    aoMudarStatus(s);
+    // Fora de Aguardando acerto/Finalizado o pedido não conta no
+    // Financeiro — se ficasse com o pagamento, o dinheiro sumia da conta
+    // mas continuava registrado. Voltar o status desfaz o pagamento.
+    if (
+      s !== pedido.status &&
+      !pedidoContabilizado({ status: s }) &&
+      (pedido.valorPago > 0 || pagamentosDoPedido.length > 0)
+    ) {
+      setVoltandoPara(s);
+      return;
+    }
+    aoMudar({ status: s });
+  }
+
+  async function confirmarVolta() {
+    if (!voltandoPara || apagandoPagamentos) return;
+    setApagandoPagamentos(true);
+    try {
+      for (const p of pagamentosDoPedido) {
+        await removerPagamento(p.id);
+      }
+      aoMudar({ status: voltandoPara, valorPago: 0 });
+      setVoltandoPara(null);
+    } finally {
+      setApagandoPagamentos(false);
+    }
   }
 
   return (
@@ -568,11 +602,7 @@ function BarraStatus({
           <ArrowLeftRight className="h-3.5 w-3.5 text-texto-suave" />
         </button>
         <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 md:mx-0 md:px-0">
-          {STATUS_DISPONIVEIS.filter(
-            // Voltar pra rascunho só antes de receber algum pagamento — senão o
-            // pedido some do financeiro com dinheiro já recebido.
-            (s) => s !== "RASCUNHO" || pedido.status === "RASCUNHO" || !(pedido.valorPago > 0),
-          ).map((s) => {
+          {STATUS_DISPONIVEIS.map((s) => {
             const bloqueado =
               s === "FINALIZADO" && pedido.status !== "FINALIZADO" && saldoAberto > 0.005;
             return (
@@ -596,6 +626,42 @@ function BarraStatus({
           {aviso}
         </p>
       )}
+
+      <Modal
+        aberto={!!voltandoPara}
+        aoFechar={() => setVoltandoPara(null)}
+        titulo={`Voltar para ${voltandoPara ? ROTULO_STATUS[voltandoPara] : ""}`}
+        rodape={
+          <>
+            <button
+              className="btn-secundario"
+              onClick={() => setVoltandoPara(null)}
+              disabled={apagandoPagamentos}
+            >
+              Cancelar
+            </button>
+            <button
+              className="btn-perigo"
+              onClick={confirmarVolta}
+              disabled={apagandoPagamentos}
+            >
+              {apagandoPagamentos ? "Apagando…" : "Apagar pagamentos e voltar"}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-2 text-sm text-texto-suave">
+          <p>
+            Este pedido já tem <strong className="text-texto">{brl(pedido.valorPago)}</strong>{" "}
+            em pagamento registrado.
+          </p>
+          <p>
+            Em {voltandoPara ? ROTULO_STATUS[voltandoPara] : ""} o pedido não conta no
+            Financeiro nem no painel, então os pagamentos dele serão apagados. Se o
+            cliente pagar de novo, é só registrar outra vez.
+          </p>
+        </div>
+      </Modal>
 
       <Modal
         aberto={trocandoTipo}
@@ -716,8 +782,11 @@ function Resumo({
           <p className="text-[11px] font-semibold tracking-wide text-emerald-800 dark:text-emerald-400 uppercase">
             {pedido.status === "FINALIZADO" || pedido.status === "ACERTO" ? "Lucro do Evento" : "Lucro Previsto"}
           </p>
-          <p className="mt-1 text-xl font-black tabular-nums text-emerald-700 dark:text-emerald-500">
+          <p className="mt-1 flex flex-wrap items-baseline gap-x-2 text-xl font-black tabular-nums text-emerald-700 dark:text-emerald-500">
             {brl(totais.lucro)}
+            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-bold">
+              {margemLucro(totais).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%
+            </span>
           </p>
           <p className="mt-0.5 text-xs text-emerald-600/80 dark:text-emerald-500/80">
             Custo total: {brl(totais.custoTotal)}
@@ -1849,11 +1918,13 @@ function RegistrarPagamento({
       const novoTotalPago = (pedido.valorPago || 0) + v;
       aoMudar({
         valorPago: novoTotalPago,
-        // Quitou tudo? O pedido fecha sozinho.
+        // Quitou tudo? O pedido fecha sozinho. Pagamento parcial num pedido
+        // que ainda não conta no Financeiro (Rascunho/Entregue) leva pra
+        // Aguardando acerto — senão o dinheiro recebido ficava fora da conta.
         status:
           novoTotalPago >= totais.totalReceber - 0.005
             ? "FINALIZADO"
-            : pedido.status === "RASCUNHO"
+            : !pedidoContabilizado(pedido)
               ? "ACERTO"
               : pedido.status,
       });

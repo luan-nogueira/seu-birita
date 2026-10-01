@@ -22,7 +22,12 @@ import { ModalAgendarEvento } from "@/components/ModalAgendarEvento";
 import { useDados } from "@/lib/store";
 import { rotaPedido } from "@/lib/rotas";
 import { useAuth } from "@/lib/auth";
-import { calcularTotais, lucroTotal, lucroRecebidoTotal } from "@/lib/calc";
+import {
+  calcularTotais,
+  lucroTotal,
+  lucroRecebidoTotal,
+  pedidoContabilizado,
+} from "@/lib/calc";
 import { brl, dataBR, hojeISO } from "@/lib/format";
 
 export default function InicioPage() {
@@ -32,25 +37,28 @@ export default function InicioPage() {
   const [agendarAberto, setAgendarAberto] = useState(false);
 
   const ativos = pedidos.filter((p) => p.status !== "CANCELADO");
+  // Rascunho e Entregue ainda não são venda fechada — só entram nos números
+  // a partir de Aguardando acerto (ver pedidoContabilizado).
+  const contabilizados = ativos.filter(pedidoContabilizado);
 
-  const aReceber = ativos
-    .filter((p) => p.status !== "RASCUNHO")
-    .reduce((soma, p) => soma + Math.max(0, calcularTotais(p).saldoAberto), 0);
+  const aReceber = contabilizados.reduce(
+    (soma, p) => soma + Math.max(0, calcularTotais(p).saldoAberto),
+    0,
+  );
 
   // Data local (hojeISO), não toISOString — senão depois das 21h o filtro
   // já pulava pro dia/mês seguinte.
   const [dataInicial, setDataInicial] = useState(() => hojeISO().slice(0, 8) + "01");
   const [dataFinal, setDataFinal] = useState(hojeISO);
 
-  // Rascunho ainda não é uma venda de verdade — não deve entrar no
-  // faturamento/lucro do mês, só depois de sair do estágio de rascunho.
-  const pedidosDoMes = ativos.filter(
-    (p) => {
-      if (p.status === "RASCUNHO") return false;
-      const d = p.dataEvento.slice(0, 10);
-      return d >= dataInicial && d <= dataFinal;
-    },
-  );
+  const noPeriodo = (p: { dataEvento: string }) => {
+    const d = p.dataEvento.slice(0, 10);
+    return d >= dataInicial && d <= dataFinal;
+  };
+  const pedidosDoMes = contabilizados.filter(noPeriodo);
+  // A contagem de eventos segue incluindo os Entregues — o evento aconteceu,
+  // só o dinheiro é que ainda não entra na conta.
+  const eventosDoMes = ativos.filter((p) => p.status !== "RASCUNHO" && noPeriodo(p));
   const faturadoMes = pedidosDoMes.reduce(
     (soma, p) => soma + calcularTotais(p).valorFinal,
     0,
@@ -65,9 +73,8 @@ export default function InicioPage() {
   const aPagar = contasPendentes.reduce((soma, c) => soma + c.valor, 0);
   const contasVencidas = contasPendentes.filter((c) => c.vencimento < hoje);
 
-  const emAberto = ativos.filter(
-    (p) =>
-      p.status !== "RASCUNHO" && calcularTotais(p).saldoAberto > 0.005,
+  const emAberto = contabilizados.filter(
+    (p) => calcularTotais(p).saldoAberto > 0.005,
   );
 
   const recentes = ativos.slice(0, 5);
@@ -169,7 +176,7 @@ export default function InicioPage() {
               <Cartao
                 Icone={CalendarDays}
                 rotulo="Eventos no período"
-                valor={String(pedidosDoMes.length)}
+                valor={String(eventosDoMes.length)}
                 detalhe="pedidos no período"
               />
               <Cartao

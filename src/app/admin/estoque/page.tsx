@@ -7,7 +7,7 @@ import { useDados } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { novoId } from "@/lib/db";
 import { brl, caixasEUnidades, dataBR, dataHoraBR, hojeISO, normalizar } from "@/lib/format";
-import { compararCategorias, semCustoNoEstoque } from "@/lib/calc";
+import { compararCategorias, estoqueNegativo, semCustoNoEstoque } from "@/lib/calc";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -474,7 +474,7 @@ function EstoquePageInterno() {
     return produtosOrdenados.filter(
       (p) =>
         (!soSemCusto || semCustoNoEstoque(p)) &&
-        (!soNegativos || p.estoqueUn < 0) &&
+        (!soNegativos || estoqueNegativo(p)) &&
         (!termo || normalizar(p.nome).includes(termo) || normalizar(p.categoria).includes(termo)),
     );
   }, [produtosOrdenados, busca, soSemCusto, soNegativos]);
@@ -488,7 +488,7 @@ function EstoquePageInterno() {
     let semCusto = 0;
     let negativos = 0;
     for (const p of produtosOrdenados) {
-      if (p.estoqueUn < 0) negativos++;
+      if (estoqueNegativo(p)) negativos++;
       if (p.estoqueUn <= 0) continue;
       custo += p.estoqueUn * (p.precoCusto || 0);
       venda += p.estoqueUn * (p.precoUn || 0);
@@ -824,7 +824,7 @@ function EstoquePageInterno() {
                 </h2>
                 <ul className="card divide-y divide-borda overflow-hidden">
                   {itens.map((p) => {
-                    const negativo = p.estoqueUn < 0;
+                    const negativo = estoqueNegativo(p);
                     const baixo = !negativo && p.estoqueMinimo > 0 && p.estoqueUn <= p.estoqueMinimo;
                     return (
                       <li key={p.id}>
@@ -1317,7 +1317,7 @@ function ModalHistorico({
           <div className="text-right">
             <span
               className={`block text-xl font-black tabular-nums ${
-                produto.estoqueUn < 0 ? "text-red-600 dark:text-red-400" : ""
+                estoqueNegativo(produto) ? "text-red-600 dark:text-red-400" : ""
               }`}
             >
               {produto.estoqueUn} un
@@ -1329,7 +1329,7 @@ function ModalHistorico({
             )}
           </div>
         </div>
-        {produto.estoqueUn < 0 && (
+        {estoqueNegativo(produto) && (
           <p className="-mt-2 text-xs text-red-600 dark:text-red-400">
             Negativo — venderam mais do que estava lançado. Faz um "Ajuste" pra
             corrigir com a contagem real do galpão.

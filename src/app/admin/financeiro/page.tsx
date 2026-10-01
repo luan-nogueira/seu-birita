@@ -17,7 +17,12 @@ import { Cabecalho, Modal } from "@/components/ui";
 import { Protegido } from "@/components/Protegido";
 import { useDados, novoId } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
-import { calcularTotais, lucroTotal, lucroRecebidoTotal } from "@/lib/calc";
+import {
+  calcularTotais,
+  lucroTotal,
+  lucroRecebidoTotal,
+  pedidoContabilizado,
+} from "@/lib/calc";
 import { brl, dataBR, hojeISO, paraCampo, paraNumero } from "@/lib/format";
 import type { ContaPagar, Pagamento } from "@/lib/types";
 
@@ -69,15 +74,24 @@ function FinanceiroPageInterno() {
   const { permissoes } = useAuth();
   const [excluindoPagamento, setExcluindoPagamento] = useState<Pagamento | null>(null);
 
-  const ativos = useMemo(
-    () => pedidos.filter((p) => p.status !== "CANCELADO" && p.status !== "RASCUNHO"),
-    [pedidos],
-  );
+  // Só Aguardando acerto e Finalizado — Rascunho e Entregue ainda não
+  // contam como venda (ver pedidoContabilizado).
+  const ativos = useMemo(() => pedidos.filter(pedidoContabilizado), [pedidos]);
+
+  // Pagamento de pedido que voltou pra Entregue/Rascunho também sai da
+  // conta. Pagamento sem pedido (excluído antes da correção) segue contando.
+  const pagamentosValidos = useMemo(() => {
+    const porId = new Map(pedidos.map((p) => [p.id, p]));
+    return pagamentos.filter((pg) => {
+      const pedido = porId.get(pg.pedidoId);
+      return !pedido || pedidoContabilizado(pedido);
+    });
+  }, [pedidos, pagamentos]);
 
   const [dataInicial, setDataInicial] = useState(() => hojeISO().slice(0, 8) + "01");
   const [dataFinal, setDataFinal] = useState(hojeISO());
 
-  const recebidoMes = pagamentos
+  const recebidoMes = pagamentosValidos
     .filter((p) => {
       const d = p.data.slice(0, 10);
       return d >= dataInicial && d <= dataFinal;
@@ -133,8 +147,8 @@ function FinanceiroPageInterno() {
   }, [ativos]);
 
   const ultimosPagamentos = useMemo(
-    () => [...pagamentos].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 12),
-    [pagamentos],
+    () => [...pagamentosValidos].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 12),
+    [pagamentosValidos],
   );
 
   async function confirmarExclusaoPagamento() {

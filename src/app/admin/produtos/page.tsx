@@ -20,7 +20,7 @@ import { useDados, novoId } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { firebaseConfigurado } from "@/lib/firebase";
 import { brl, dataBR, normalizar, paraCampo, paraNumero } from "@/lib/format";
-import { compararCategorias, semCustoNoEstoque } from "@/lib/calc";
+import { compararCategorias, estoqueNegativo, semCustoNoEstoque } from "@/lib/calc";
 import { CATEGORIAS_PADRAO, semearProdutos } from "@/lib/db/seed";
 import type { Produto } from "@/lib/types";
 
@@ -394,7 +394,7 @@ function ProdutosPageInterno() {
                           sem custo
                         </span>
                       )}
-                      {p.estoqueUn < 0 && (
+                      {estoqueNegativo(p) && (
                         <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-600 uppercase dark:bg-red-950 dark:text-red-400" title="Foi vendido mais do que tinha no sistema">
                           Estoque Negativo
                         </span>

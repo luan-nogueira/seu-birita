@@ -141,6 +141,22 @@ export function calcularTotais(pedido: Pedido): TotaisPedido {
   };
 }
 
+/** Margem de lucro sobre o que o cliente paga (lucro ÷ valor líquido), em %. */
+export function margemLucro(t: TotaisPedido): number {
+  const receita = t.valorFinal - t.desconto;
+  if (receita <= 0) return 0;
+  return (t.lucro / receita) * 100;
+}
+
+/**
+ * Só Aguardando acerto e Finalizado contam como venda de verdade — é aí que
+ * o pedido entra no Financeiro, no painel inicial e baixa o estoque.
+ * Rascunho e Entregue ainda podem mudar (devolução, itens), então ficam fora.
+ */
+export function pedidoContabilizado(pedido: Pick<Pedido, "status">): boolean {
+  return pedido.status === "ACERTO" || pedido.status === "FINALIZADO";
+}
+
 /** Soma o lucro (calcularTotais) de uma lista de pedidos — lucro cheio, mesmo sem ter recebido ainda. */
 export function lucroTotal(pedidos: Pedido[]): number {
   return pedidos.reduce((soma, p) => soma + calcularTotais(p).lucro, 0);
@@ -165,11 +181,12 @@ export function lucroRecebidoTotal(pedidos: Pedido[]): number {
 /**
  * Quanto de cada produto está fora do galpão por causa deste pedido —
  * usado pra saber quanto debitar/creditar do estoque automaticamente.
- * Pedido cancelado não tira nada do galpão (é como se nunca tivesse saído).
+ * Só baixa a partir de Aguardando acerto (ver pedidoContabilizado) — voltar
+ * o pedido pra Entregue/Rascunho devolve tudo pro estoque.
  */
 export function efeitoEstoque(pedido: Pedido): Map<string, number> {
   const mapa = new Map<string, number>();
-  if (pedido.status === "CANCELADO" || pedido.status === "RASCUNHO") return mapa;
+  if (!pedidoContabilizado(pedido)) return mapa;
   for (const item of pedido.itens) {
     mapa.set(item.produtoId, saldoUn(item, pedido.tipo));
   }
@@ -203,6 +220,21 @@ export function totalRemessas(itens: PedidoItem[]): number {
 
 
 const ORDEM_FIM = ["gelo", "descartaveis", "estrutura", "comodato", "estrutura e comodato"];
+
+/**
+ * Comodato e estrutura (bags, bistrôs, caixa térmica…) vão e voltam dos
+ * eventos e não são mercadoria vendida — ficar negativo neles não é erro
+ * de lançamento, então não entram no aviso de estoque negativo.
+ */
+export function categoriaSemAvisoNegativo(categoria: string): boolean {
+  const c = normalizar(categoria || "");
+  return c.includes("comodato") || c.includes("estrutura");
+}
+
+/** Estoque negativo que merece aviso (fora comodato/estrutura). */
+export function estoqueNegativo(produto: Produto): boolean {
+  return produto.estoqueUn < 0 && !categoriaSemAvisoNegativo(produto.categoria);
+}
 
 export function compararCategorias(a: string, b: string): number {
   const normA = normalizar(a || "Sem categoria");
