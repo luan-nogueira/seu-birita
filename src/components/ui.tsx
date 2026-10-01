@@ -58,6 +58,9 @@ export function Vazio({
   );
 }
 
+/** Folhas (Modal) abertas agora — ver a trava do fundo no Modal. */
+let modaisAbertos = 0;
+
 /**
  * No celular sobe de baixo como uma folha; no desktop centraliza.
  * É o mesmo componente pros dois — só muda o posicionamento.
@@ -91,14 +94,23 @@ export function Modal({
       if (e.key === "Escape") aoFechar();
     };
     document.addEventListener("keydown", aoTeclar);
-    // Trava o fundo pra não rolar atrás da folha.
-    const overflowAnterior = document.body.style.overflow;
+    return () => document.removeEventListener("keydown", aoTeclar);
+  }, [aberto, aoFechar]);
+
+  // Trava o fundo pra não rolar atrás da folha. Conta as folhas abertas em
+  // vez de guardar o overflow anterior: com uma folha dentro da outra
+  // (histórico + editar compra), salvar refazia o efeito das duas juntas,
+  // cada uma guardava o "hidden" da outra e o fundo ficava travado depois
+  // de fechar tudo — só voltava reabrindo o app.
+  useEffect(() => {
+    if (!aberto) return;
+    modaisAbertos++;
     document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener("keydown", aoTeclar);
-      document.body.style.overflow = overflowAnterior;
+      modaisAbertos--;
+      if (modaisAbertos === 0) document.body.style.overflow = "";
     };
-  }, [aberto, aoFechar]);
+  }, [aberto]);
 
   if (!aberto || !montado) return null;
 
