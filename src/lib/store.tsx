@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { colecao, modoDemonstracao, novoId } from "./db";
-import { calcularTotais } from "./calc";
+import { calcularTotais, comodatoPorCategoria, type EhComodato } from "./calc";
 import { useAuth } from "./auth";
 import type {
   Cliente,
@@ -62,6 +62,8 @@ interface Dados {
   produtoPorId: (id: string) => Produto | undefined;
   clientePorId: (id: string) => Cliente | undefined;
   pedidoPorId: (id: string) => Pedido | undefined;
+  /** Item de comodato/estrutura: vai no pedido, mas não é cobrado (ver calcularTotais). */
+  ehComodato: EhComodato;
   /** Soma do que o cliente ainda deve em pedidos não finalizados. */
   pendenciaDoCliente: (clienteId: string, ignorarPedidoId?: string) => number;
 }
@@ -201,6 +203,8 @@ export function DadosProvider({ children }: { children: React.ReactNode }) {
     const pedidosOrdenados = [...pedidos].sort((a, b) =>
       b.dataEvento.localeCompare(a.dataEvento) || b.numero - a.numero,
     );
+    const produtoPorId = (id: string) => produtos.find((p) => p.id === id);
+    const ehComodato = comodatoPorCategoria(produtoPorId);
 
     return {
       produtos: produtosOrdenados,
@@ -229,9 +233,10 @@ export function DadosProvider({ children }: { children: React.ReactNode }) {
         pedidos.reduce((max, p) => Math.max(max, p.numero || 0), 0) + 1,
       proximoNumeroPedidoCliente: () =>
         pedidosClientes.reduce((max, p) => Math.max(max, p.numero || 0), 0) + 1,
-      produtoPorId: (id) => produtos.find((p) => p.id === id),
+      produtoPorId,
       clientePorId: (id) => clientes.find((c) => c.id === id),
       pedidoPorId: (id) => pedidos.find((p) => p.id === id),
+      ehComodato,
 
       // Rascunho não fica de fora daqui — um pedido pode ter saldo real
       // (ex: pendência anterior lançada nele) mesmo antes de sair do estágio
@@ -244,7 +249,7 @@ export function DadosProvider({ children }: { children: React.ReactNode }) {
               p.id !== ignorarPedidoId &&
               p.status !== "CANCELADO",
           )
-          .reduce((soma, p) => soma + calcularTotais(p).saldoAberto, 0),
+          .reduce((soma, p) => soma + calcularTotais(p, ehComodato).saldoAberto, 0),
     };
   }, [authCarregando, produtos, clientes, fornecedores, pedidos, pagamentos, movimentos, pedidosClientes, contasPagar, usuarios, prontas]);
 

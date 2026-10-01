@@ -97,29 +97,28 @@ export interface TotaisPedido {
   unidadesEntregues: number;
   unidadesDevolvidas: number;
   unidadesConsumidas: number;
-  /** Custo da mercadoria consumida que entra no lucro (sem comodato/estrutura). */
+  /** Custo da mercadoria consumida (sem comodato/estrutura). */
   custoTotal: number;
-  /** Consumo de comodato/estrutura — o cliente paga, mas fica fora do lucro. */
-  valorForaDoLucro: number;
-  /** valorFinal - valorForaDoLucro - desconto - custoTotal */
+  /** valorFinal - desconto - custoTotal */
   lucro: number;
 }
 
-/** Diz se um item do pedido fica fora do lucro (ver foraDoLucroPorCategoria). */
-export type ForaDoLucro = (item: PedidoItem) => boolean;
+/** Diz se um item do pedido é comodato/estrutura (ver comodatoPorCategoria). */
+export type EhComodato = (item: PedidoItem) => boolean;
 
 /**
- * Comodato e estrutura são aluguel de equipamento, não revenda: o valor
- * cobrado entrava inteiro como lucro (custo zero) e inflava a margem do
- * evento. A categoria vem do cadastro do produto, que o item não guarda.
+ * Comodato e estrutura (bags, bistrôs, caixa térmica…) são emprestados pro
+ * evento e voltam: vão no pedido pra controlar a ida e a volta, mas não são
+ * cobrados do cliente nem entram no lucro. A categoria vem do cadastro do
+ * produto, que o item não guarda.
  */
-export function foraDoLucroPorCategoria(
+export function comodatoPorCategoria(
   produtoPorId: (id: string) => Produto | undefined,
-): ForaDoLucro {
+): EhComodato {
   return (item) => categoriaComodato(produtoPorId(item.produtoId)?.categoria ?? "");
 }
 
-export function calcularTotais(pedido: Pedido, foraDoLucro?: ForaDoLucro): TotaisPedido {
+export function calcularTotais(pedido: Pedido, ehComodato: EhComodato): TotaisPedido {
   const { tipo, itens } = pedido;
 
   let valorPedido = 0;
@@ -127,18 +126,14 @@ export function calcularTotais(pedido: Pedido, foraDoLucro?: ForaDoLucro): Totai
   let unidadesEntregues = 0;
   let unidadesDevolvidas = 0;
   let custoTotal = 0;
-  let valorForaDoLucro = 0;
 
   for (const item of itens) {
-    valorPedido += valorPedidoItem(item);
-    valorFinal += valorFinalItem(item, tipo);
     unidadesEntregues += entregueUn(item);
     unidadesDevolvidas += devolvidoUn(item, tipo);
-    if (foraDoLucro?.(item)) {
-      valorForaDoLucro += valorFinalItem(item, tipo);
-    } else {
-      custoTotal += saldoUn(item, tipo) * (item.custoUn || 0);
-    }
+    if (ehComodato(item)) continue;
+    valorPedido += valorPedidoItem(item);
+    valorFinal += valorFinalItem(item, tipo);
+    custoTotal += saldoUn(item, tipo) * (item.custoUn || 0);
   }
 
   const desconto = pedido.desconto || 0;
@@ -159,14 +154,13 @@ export function calcularTotais(pedido: Pedido, foraDoLucro?: ForaDoLucro): Totai
     unidadesDevolvidas,
     unidadesConsumidas: unidadesEntregues - unidadesDevolvidas,
     custoTotal,
-    valorForaDoLucro,
-    lucro: valorFinal - valorForaDoLucro - desconto - custoTotal,
+    lucro: valorFinal - desconto - custoTotal,
   };
 }
 
 /** Margem de lucro sobre o que o cliente paga (lucro ÷ valor líquido), em %. */
 export function margemLucro(t: TotaisPedido): number {
-  const receita = t.valorFinal - t.valorForaDoLucro - t.desconto;
+  const receita = t.valorFinal - t.desconto;
   if (receita <= 0) return 0;
   return (t.lucro / receita) * 100;
 }
@@ -181,8 +175,8 @@ export function pedidoContabilizado(pedido: Pick<Pedido, "status">): boolean {
 }
 
 /** Soma o lucro (calcularTotais) de uma lista de pedidos — lucro cheio, mesmo sem ter recebido ainda. */
-export function lucroTotal(pedidos: Pedido[], foraDoLucro?: ForaDoLucro): number {
-  return pedidos.reduce((soma, p) => soma + calcularTotais(p, foraDoLucro).lucro, 0);
+export function lucroTotal(pedidos: Pedido[], ehComodato: EhComodato): number {
+  return pedidos.reduce((soma, p) => soma + calcularTotais(p, ehComodato).lucro, 0);
 }
 
 /**
@@ -190,15 +184,15 @@ export function lucroTotal(pedidos: Pedido[], foraDoLucro?: ForaDoLucro): number
  * pedido, conta só metade do lucro. Sem isso, um pedido de R$1.900 com
  * apenas R$900 recebidos já aparecia com o lucro do evento inteiro.
  */
-export function lucroRecebido(pedido: Pedido, foraDoLucro?: ForaDoLucro): number {
-  const t = calcularTotais(pedido, foraDoLucro);
+export function lucroRecebido(pedido: Pedido, ehComodato: EhComodato): number {
+  const t = calcularTotais(pedido, ehComodato);
   if (t.totalReceber <= 0) return 0;
   const fracaoPaga = Math.min(1, Math.max(0, t.valorPago / t.totalReceber));
   return t.lucro * fracaoPaga;
 }
 
-export function lucroRecebidoTotal(pedidos: Pedido[], foraDoLucro?: ForaDoLucro): number {
-  return pedidos.reduce((soma, p) => soma + lucroRecebido(p, foraDoLucro), 0);
+export function lucroRecebidoTotal(pedidos: Pedido[], ehComodato: EhComodato): number {
+  return pedidos.reduce((soma, p) => soma + lucroRecebido(p, ehComodato), 0);
 }
 
 /**

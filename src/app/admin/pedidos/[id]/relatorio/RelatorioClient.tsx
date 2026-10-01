@@ -22,7 +22,7 @@ import { EMPRESA } from "@/lib/empresa";
 
 export default function RelatorioPage() {
   const id = useIdPedido();
-  const { pedidoPorId, clientePorId, produtoPorId, carregando } = useDados();
+  const { pedidoPorId, clientePorId, produtoPorId, ehComodato, carregando } = useDados();
 
   const pedido = pedidoPorId(id);
 
@@ -50,7 +50,7 @@ export default function RelatorioPage() {
   }
 
   const cliente = clientePorId(pedido.clienteId);
-  const totais = calcularTotais(pedido);
+  const totais = calcularTotais(pedido, ehComodato);
   const consignacao = pedido.tipo === "CONSIGNACAO";
 
   // Itens sem nenhuma movimentação só poluem o documento.
@@ -268,12 +268,25 @@ export default function RelatorioPage() {
                       <td className="border-b border-neutral-200 px-2 py-1.5 text-right font-bold tabular-nums">
                         {num(saldo)}
                       </td>
-                      <td className="border-b border-neutral-200 px-2 py-1.5 text-right tabular-nums">
-                        {brl(item.precoUn)}
-                      </td>
-                      <td className="border-b border-neutral-200 px-2 py-1.5 text-right font-bold tabular-nums">
-                        {brlOuTraco(valorFinalItem(item, pedido.tipo))}
-                      </td>
+                      {ehComodato(item) ? (
+                        <>
+                          <td className="border-b border-neutral-200 px-2 py-1.5 text-right text-[10px] text-neutral-500">
+                            Comodato
+                          </td>
+                          <td className="border-b border-neutral-200 px-2 py-1.5 text-right tabular-nums">
+                            —
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="border-b border-neutral-200 px-2 py-1.5 text-right tabular-nums">
+                            {brl(item.precoUn)}
+                          </td>
+                          <td className="border-b border-neutral-200 px-2 py-1.5 text-right font-bold tabular-nums">
+                            {brlOuTraco(valorFinalItem(item, pedido.tipo))}
+                          </td>
+                        </>
+                      )}
                     </tr>
 
                     {/* Sub-linhas por remessa — só quando há datas registradas */}

@@ -1,6 +1,7 @@
 import { novoId } from "./db";
 import { hojeISO } from "./format";
-import type { EstoqueMovimento, Produto } from "./types";
+import { efeitoEstoque } from "./calc";
+import type { EstoqueMovimento, Pedido, Produto } from "./types";
 
 interface DepsEstoque {
   produtoPorId: (id: string) => Produto | undefined;
@@ -116,4 +117,77 @@ export function efeitoLancado(
     mapa.set(m.produtoId, (mapa.get(m.produtoId) ?? 0) + sinal * m.quantidadeUn);
   }
   return mapa;
+}
+
+export interface PedidoDesatualizado {
+  pedido: Pedido;
+  /** Por produto: quanto falta tirar do estoque (negativo = devolver). */
+  deltas: Map<string, number>;
+}
+
+/**
+ * Pedidos cujo lançamento no estoque não bate com a regra atual. O pedido
+ * só reaplica a regra quando é editado — quando a regra mudou (Entregue
+ * deixou de baixar estoque), os que já estavam Entregue continuaram com a
+ * mercadoria fora do estoque até alguém mexer neles. Pedido sem nenhum
+ * lançamento (anterior ao controle de estoque) fica de fora.
+ */
+export function pedidosDesatualizados(
+  pedidos: Pedido[],
+  movimentos: EstoqueMovimento[],
+): PedidoDesatualizado[] {
+  const lista: PedidoDesatualizado[] = [];
+  for (const pedido of pedidos) {
+    const lancado = efeitoLancado(movimentos, pedido.id);
+    if (!lancado) continue;
+    const esperado = efeitoEstoque(pedido);
+    const deltas = new Map<string, number>();
+    for (const produtoId of new Set([...lancado.keys(), ...esperado.keys()])) {
+      const delta = (esperado.get(produtoId) ?? 0) - (lancado.get(produtoId) ?? 0);
+      if (delta !== 0) deltas.set(produtoId, delta);
+    }
+    if (deltas.size > 0) lista.push({ pedido, deltas });
+  }
+  return lista;
+}
+
+/**
+ * Lança a diferença de cada pedido desatualizado (um lançamento por pedido
+ * e produto, pra efeitoLancado enxergar) e grava cada produto uma vez só,
+ * com a soma — gravar por pedido partiria do mesmo estoque antigo e um
+ * pedido apagaria o acerto do outro.
+ */
+export async function acertarPedidosDesatualizados(
+  lista: PedidoDesatualizado[],
+  { produtoPorId, salvarProduto, salvarMovimento }: DepsEstoque,
+) {
+  const totalPorProduto = new Map<string, number>();
+  for (const { pedido, deltas } of lista) {
+    for (const [produtoId, delta] of deltas) {
+      const produto = produtoPorId(produtoId);
+      if (!produto) continue;
+      await salvarMovimento({
+        id: novoId(),
+        produtoId,
+        produtoNome: produto.nome,
+        tipo: delta > 0 ? "SAIDA" : "ENTRADA",
+        origem: delta > 0 ? "PEDIDO" : "DEVOLUCAO",
+        quantidadeUn: Math.abs(delta),
+        referenciaId: pedido.id,
+        data: hojeISO(),
+        obs: "Acerto: pedido seguindo a regra atual de baixa de estoque",
+        criadoEm: new Date().toISOString(),
+      });
+      totalPorProduto.set(produtoId, (totalPorProduto.get(produtoId) ?? 0) + delta);
+    }
+  }
+  for (const [produtoId, delta] of totalPorProduto) {
+    const produto = produtoPorId(produtoId);
+    if (!produto || delta === 0) continue;
+    await salvarProduto({
+      ...produto,
+      estoqueUn: produto.estoqueUn - delta,
+      atualizadoEm: new Date().toISOString(),
+    });
+  }
 }

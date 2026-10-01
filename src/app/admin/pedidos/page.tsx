@@ -164,7 +164,8 @@ function ConteudoPedidos() {
 }
 
 function CartaoPedido({ pedido }: { pedido: Pedido }) {
-  const t = calcularTotais(pedido);
+  const { ehComodato } = useDados();
+  const t = calcularTotais(pedido, ehComodato);
   const emAberto = t.saldoAberto > 0.005 && pedido.status !== "CANCELADO";
 
   return (

@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { novoId } from "@/lib/db";
 import { brl, caixasEUnidades, dataBR, dataHoraBR, hojeISO, normalizar } from "@/lib/format";
 import { compararCategorias, estoqueNegativo, paraCaixas, semCustoNoEstoque } from "@/lib/calc";
+import { acertarPedidosDesatualizados, pedidosDesatualizados } from "@/lib/estoque";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -392,6 +393,7 @@ function EstoquePageInterno() {
     salvarContaPagar,
     produtoPorId,
     pedidoPorId,
+    pedidos,
     removerMovimento,
   } = useDados();
 
@@ -429,6 +431,33 @@ function EstoquePageInterno() {
       }
     } finally {
       setLimpandoOrfaos(false);
+    }
+  }
+
+  // Pedidos que ainda seguem a regra antiga de baixa (ver pedidosDesatualizados).
+  const desatualizados = useMemo(
+    () => pedidosDesatualizados(pedidos, movimentos),
+    [pedidos, movimentos],
+  );
+  const [acertandoPedidos, setAcertandoPedidos] = useState(false);
+
+  async function acertarPedidos() {
+    if (acertandoPedidos) return;
+    const linhas = desatualizados.map(({ pedido, deltas }) => {
+      const total = [...deltas.values()].reduce((s, d) => s + d, 0);
+      const acao = total < 0 ? `volta ${-total} un` : `sai ${total} un`;
+      return `#${String(pedido.numero).padStart(3, "0")} ${pedido.clienteNome}: ${acao}`;
+    });
+    if (!window.confirm(`Acertar o estoque destes pedidos?\n\n${linhas.join("\n")}`)) return;
+    setAcertandoPedidos(true);
+    try {
+      await acertarPedidosDesatualizados(desatualizados, {
+        produtoPorId,
+        salvarProduto,
+        salvarMovimento,
+      });
+    } finally {
+      setAcertandoPedidos(false);
     }
   }
 
@@ -686,6 +715,29 @@ function EstoquePageInterno() {
             disabled={limpandoOrfaos}
           >
             {limpandoOrfaos ? "Limpando…" : "Limpar agora"}
+          </button>
+        </div>
+      )}
+
+      {desatualizados.length > 0 && (
+        <div className="mx-4 mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-ouro-300 bg-ouro-50 px-4 py-3 text-sm dark:bg-ouro-900/20 md:mx-6">
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold">
+              {desatualizados.length} pedido(s) com o estoque desatualizado
+            </span>
+            <span className="block text-xs text-texto-suave">
+              Pedido em Rascunho ou Entregue não tira mais do estoque (só a
+              partir de Aguardando acerto), mas os que já estavam assim
+              continuaram com a mercadoria fora.
+            </span>
+          </span>
+          <button
+            type="button"
+            className="btn-primario shrink-0 text-xs"
+            onClick={acertarPedidos}
+            disabled={acertandoPedidos}
+          >
+            {acertandoPedidos ? "Acertando…" : "Acertar agora"}
           </button>
         </div>
       )}

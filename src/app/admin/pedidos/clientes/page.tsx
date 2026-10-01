@@ -86,6 +86,7 @@ function PedidosClientesPageInterno() {
     clientes,
     salvarCliente,
     produtoPorId,
+    ehComodato,
     salvarProduto,
     salvarMovimento,
     salvarPedido,
@@ -153,7 +154,7 @@ function PedidosClientesPageInterno() {
         criadoEm: agora,
         atualizadoEm: agora,
       };
-      const totais = calcularTotais(novoPedido);
+      const totais = calcularTotais(novoPedido, ehComodato);
       novoPedido.valorPedido = totais.valorPedido;
       novoPedido.valorFinal = totais.valorFinal;
 

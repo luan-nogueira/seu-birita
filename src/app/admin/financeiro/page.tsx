@@ -19,7 +19,6 @@ import { useDados, novoId } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import {
   calcularTotais,
-  foraDoLucroPorCategoria,
   lucroTotal,
   lucroRecebidoTotal,
   pedidoContabilizado,
@@ -70,7 +69,7 @@ function FinanceiroPageInterno() {
     removerContaPagar,
     salvarPedido,
     removerPagamento,
-    produtoPorId,
+    ehComodato,
     carregando,
   } = useDados();
   const { permissoes } = useAuth();
@@ -107,12 +106,11 @@ function FinanceiroPageInterno() {
     }),
     [ativos, dataInicial, dataFinal],
   );
-  const foraDoLucro = foraDoLucroPorCategoria(produtoPorId);
-  const lucroRecebidoMes = lucroRecebidoTotal(pedidosDoMes, foraDoLucro);
-  const lucroPrevistoMes = lucroTotal(pedidosDoMes, foraDoLucro);
+  const lucroRecebidoMes = lucroRecebidoTotal(pedidosDoMes, ehComodato);
+  const lucroPrevistoMes = lucroTotal(pedidosDoMes, ehComodato);
 
   const aReceber = ativos.reduce(
-    (s, p) => s + Math.max(0, calcularTotais(p).saldoAberto),
+    (s, p) => s + Math.max(0, calcularTotais(p, ehComodato).saldoAberto),
     0,
   );
 
@@ -132,7 +130,7 @@ function FinanceiroPageInterno() {
     >();
 
     for (const p of ativos) {
-      const saldo = calcularTotais(p).saldoAberto;
+      const saldo = calcularTotais(p, ehComodato).saldoAberto;
       if (saldo <= 0.005) continue;
       const atual = mapa.get(p.clienteId) ?? {
         nome: p.clienteNome,
@@ -147,7 +145,7 @@ function FinanceiroPageInterno() {
     return Array.from(mapa.entries())
       .map(([id, v]) => ({ id, ...v }))
       .sort((a, b) => b.total - a.total);
-  }, [ativos]);
+  }, [ativos, ehComodato]);
 
   const ultimosPagamentos = useMemo(
     () => [...pagamentosValidos].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 12),
@@ -162,7 +160,7 @@ function FinanceiroPageInterno() {
       // depois de apagar o pagamento (mesmo bug que já corrigimos ao
       // excluir o pedido inteiro — o pagamento não pode ficar "fantasma").
       const novoValorPago = Math.max(0, (pedido.valorPago || 0) - excluindoPagamento.valor);
-      const totais = calcularTotais(pedido);
+      const totais = calcularTotais(pedido, ehComodato);
       const aindaQuitado = novoValorPago >= totais.totalReceber - 0.005;
       await salvarPedido({
         ...pedido,

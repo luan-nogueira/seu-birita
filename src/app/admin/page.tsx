@@ -24,7 +24,6 @@ import { rotaPedido } from "@/lib/rotas";
 import { useAuth } from "@/lib/auth";
 import {
   calcularTotais,
-  foraDoLucroPorCategoria,
   lucroTotal,
   lucroRecebidoTotal,
   pedidoContabilizado,
@@ -32,7 +31,7 @@ import {
 import { brl, dataBR, hojeISO } from "@/lib/format";
 
 export default function InicioPage() {
-  const { pedidos, produtos, clientes, fornecedores, contasPagar, produtoPorId, carregando } =
+  const { pedidos, produtos, clientes, fornecedores, contasPagar, ehComodato, carregando } =
     useDados();
   const { permissoes } = useAuth();
   const [agendarAberto, setAgendarAberto] = useState(false);
@@ -43,7 +42,7 @@ export default function InicioPage() {
   const contabilizados = ativos.filter(pedidoContabilizado);
 
   const aReceber = contabilizados.reduce(
-    (soma, p) => soma + Math.max(0, calcularTotais(p).saldoAberto),
+    (soma, p) => soma + Math.max(0, calcularTotais(p, ehComodato).saldoAberto),
     0,
   );
 
@@ -61,14 +60,13 @@ export default function InicioPage() {
   // só o dinheiro é que ainda não entra na conta.
   const eventosDoMes = ativos.filter((p) => p.status !== "RASCUNHO" && noPeriodo(p));
   const faturadoMes = pedidosDoMes.reduce(
-    (soma, p) => soma + calcularTotais(p).valorFinal,
+    (soma, p) => soma + calcularTotais(p, ehComodato).valorFinal,
     0,
   );
   // Lucro proporcional ao que já foi pago — um pedido com pagamento parcial
   // não deve mostrar o lucro do evento inteiro, só o que já entrou.
-  const foraDoLucro = foraDoLucroPorCategoria(produtoPorId);
-  const lucroRecebidoMes = lucroRecebidoTotal(pedidosDoMes, foraDoLucro);
-  const lucroPrevistoMes = lucroTotal(pedidosDoMes, foraDoLucro);
+  const lucroRecebidoMes = lucroRecebidoTotal(pedidosDoMes, ehComodato);
+  const lucroPrevistoMes = lucroTotal(pedidosDoMes, ehComodato);
 
   const hoje = hojeISO();
   const contasPendentes = contasPagar.filter((c) => !c.pago);
@@ -76,7 +74,7 @@ export default function InicioPage() {
   const contasVencidas = contasPendentes.filter((c) => c.vencimento < hoje);
 
   const emAberto = contabilizados.filter(
-    (p) => calcularTotais(p).saldoAberto > 0.005,
+    (p) => calcularTotais(p, ehComodato).saldoAberto > 0.005,
   );
 
   const recentes = ativos.slice(0, 5);
@@ -216,7 +214,7 @@ export default function InicioPage() {
             </h2>
             <ul className="card divide-y divide-borda overflow-hidden">
               {emAberto.slice(0, 6).map((p) => {
-                const t = calcularTotais(p);
+                const t = calcularTotais(p, ehComodato);
                 return (
                   <li key={p.id}>
                     <Link
@@ -323,7 +321,7 @@ export default function InicioPage() {
           ) : (
             <ul className="card divide-y divide-borda overflow-hidden">
               {recentes.map((p) => {
-                const t = calcularTotais(p);
+                const t = calcularTotais(p, ehComodato);
                 return (
                   <li key={p.id}>
                     <Link

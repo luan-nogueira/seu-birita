@@ -31,7 +31,6 @@ import {
   devolvidoUn,
   efeitoEstoque,
   entregueUn,
-  foraDoLucroPorCategoria,
   margemLucro,
   pedidoContabilizado,
   sobraUn,
@@ -104,6 +103,7 @@ function PedidoPageInterno() {
     pedidos,
     removerPagamento,
     produtoPorId,
+    ehComodato,
     salvarProduto,
     salvarMovimento,
     movimentos,
@@ -164,7 +164,7 @@ function PedidoPageInterno() {
     setSalvando(true);
     const t = setTimeout(async () => {
       ultimoConteudoSalvo.current = conteudo;
-      const totais = calcularTotais(pedido);
+      const totais = calcularTotais(pedido, ehComodato);
       await salvarPedido({
         ...pedido,
         valorPedido: totais.valorPedido,
@@ -203,7 +203,7 @@ function PedidoPageInterno() {
     );
   }
 
-  const totais = calcularTotais(pedido, foraDoLucroPorCategoria(produtoPorId));
+  const totais = calcularTotais(pedido, ehComodato);
   const consignacao = pedido.tipo === "CONSIGNACAO";
   const remessas = totalRemessas(pedido.itens);
 
@@ -407,6 +407,7 @@ function PedidoPageInterno() {
                           key={`${item.produtoId}-${indice}`}
                           item={item}
                           consignacao={consignacao}
+                          comodato={ehComodato(item)}
                           aoMudar={(m) => atualizarItem(indice, m)}
                           aoRemover={() => pedirRemocaoItem(indice)}
                         />
@@ -539,7 +540,7 @@ function BarraStatus({
   aoMudar: (m: Partial<Pedido>) => void;
   aoMudarTipo: (t: PedidoTipo) => void;
 }) {
-  const { pagamentos, removerPagamento } = useDados();
+  const { pagamentos, removerPagamento, ehComodato } = useDados();
   const [aviso, setAviso] = useState("");
   const [trocandoTipo, setTrocandoTipo] = useState(false);
   // Status pra onde se quer voltar (Rascunho/Entregue/Cancelado) num pedido
@@ -550,7 +551,7 @@ function BarraStatus({
   const novoTipo: PedidoTipo =
     pedido.tipo === "CONSIGNACAO" ? "VENDA_DIRETA" : "CONSIGNACAO";
   const temDevolucao = pedido.itens.some((i) => i.devolucaoCx > 0 || i.devolucaoUn > 0);
-  const saldoAberto = calcularTotais(pedido).saldoAberto;
+  const saldoAberto = calcularTotais(pedido, ehComodato).saldoAberto;
 
   function escolher(s: PedidoStatus) {
     // Finalizado é "conta fechada" — com valor em aberto o certo é
@@ -792,11 +793,6 @@ function Resumo({
           <p className="mt-0.5 text-xs text-emerald-600/80 dark:text-emerald-500/80">
             Custo total: {brl(totais.custoTotal)}
           </p>
-          {totais.valorForaDoLucro > 0.005 && (
-            <p className="text-xs text-emerald-600/80 dark:text-emerald-500/80">
-              Sem comodato/estrutura ({brl(totais.valorForaDoLucro)})
-            </p>
-          )}
         </div>
       )}
     </div>
@@ -808,11 +804,14 @@ function Resumo({
 function CartaoItem({
   item,
   consignacao,
+  comodato,
   aoMudar,
   aoRemover,
 }: {
   item: PedidoItem;
   consignacao: boolean;
+  /** Comodato/estrutura: vai e volta, mas não é cobrado. */
+  comodato: boolean;
   aoMudar: (m: Partial<PedidoItem>) => void;
   aoRemover: () => void;
 }) {
@@ -840,10 +839,17 @@ function CartaoItem({
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <p className="font-bold leading-tight">{item.nome}</p>
-          <div className="mt-0.5 flex flex-wrap items-center gap-2">
-            <CampoPrecoInline valor={item.precoUn} aoMudar={(v) => aoMudar({ precoUn: v })} />
-            <span className="text-xs text-texto-suave">/un {item.unPorCaixa > 1 && ` · ${item.unPorCaixa} un/cx`}</span>
-          </div>
+          {comodato ? (
+            <p className="mt-0.5 text-xs text-texto-suave">
+              Comodato · não cobrado
+              {item.unPorCaixa > 1 && ` · ${item.unPorCaixa} un/cx`}
+            </p>
+          ) : (
+            <div className="mt-0.5 flex flex-wrap items-center gap-2">
+              <CampoPrecoInline valor={item.precoUn} aoMudar={(v) => aoMudar({ precoUn: v })} />
+              <span className="text-xs text-texto-suave">/un {item.unPorCaixa > 1 && ` · ${item.unPorCaixa} un/cx`}</span>
+            </div>
+          )}
         </div>
         <button
           onClick={aoRemover}
@@ -925,11 +931,13 @@ function CartaoItem({
         </span>
         <span className="text-right">
           <span className="text-sm text-texto-suave tabular-nums">
-            {num(saldo)} un ·{" "}
+            {num(saldo)} un{!comodato && " · "}
           </span>
-          <span className="font-black tabular-nums">
-            {brl(valorFinalItem(item, tipo))}
-          </span>
+          {!comodato && (
+            <span className="font-black tabular-nums">
+              {brl(valorFinalItem(item, tipo))}
+            </span>
+          )}
         </span>
       </div>
     </li>
@@ -1049,6 +1057,7 @@ function TabelaItens({
   aoMudarItem: (i: number, m: Partial<PedidoItem>) => void;
   aoRemoverItem: (i: number) => void;
 }) {
+  const { ehComodato } = useDados();
   const tipo = consignacao ? "CONSIGNACAO" : "VENDA_DIRETA";
   const colunasRemessa = Array.from({ length: remessas }, (_, i) => i);
   // Coluna da sobra importada só aparece quando algum item tem sobra.
@@ -1268,17 +1277,31 @@ function TabelaItens({
                 <td className="border-l border-borda px-3 py-2 text-right font-bold tabular-nums">
                   {num(saldo)}
                 </td>
-                <td className="px-3 py-2 text-right">
-                  <div className="flex justify-end">
-                    <CampoPrecoInline valor={item.precoUn} aoMudar={(v) => aoMudarItem(indice, { precoUn: v })} />
-                  </div>
-                </td>
-                <td className="px-3 py-2 text-right text-texto-suave tabular-nums">
-                  {brlOuTraco(valorPedidoItem(item))}
-                </td>
-                <td className="px-3 py-2 text-right font-bold tabular-nums">
-                  {brlOuTraco(valorFinalItem(item, tipo))}
-                </td>
+                {ehComodato(item) ? (
+                  <>
+                    <td className="px-3 py-2 text-right text-xs text-texto-suave">
+                      Comodato
+                    </td>
+                    <td className="px-3 py-2 text-right text-texto-suave">—</td>
+                    <td className="px-3 py-2 text-right text-xs text-texto-suave">
+                      não cobrado
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="px-3 py-2 text-right">
+                      <div className="flex justify-end">
+                        <CampoPrecoInline valor={item.precoUn} aoMudar={(v) => aoMudarItem(indice, { precoUn: v })} />
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-right text-texto-suave tabular-nums">
+                      {brlOuTraco(valorPedidoItem(item))}
+                    </td>
+                    <td className="px-3 py-2 text-right font-bold tabular-nums">
+                      {brlOuTraco(valorFinalItem(item, tipo))}
+                    </td>
+                  </>
+                )}
                 <td className="px-2 py-2">
                   <button
                     onClick={() => aoRemoverItem(indice)}
@@ -2031,8 +2054,8 @@ function RegistrarPagamento({
 /* ----------------------------- Compartilhar ------------------------------ */
 
 function CompartilharWhatsApp({ pedido }: { pedido: Pedido }) {
-  const { clientePorId } = useDados();
-  const totais = calcularTotais(pedido);
+  const { clientePorId, ehComodato } = useDados();
+  const totais = calcularTotais(pedido, ehComodato);
   const cliente = clientePorId(pedido.clienteId);
 
   function montarTexto() {
@@ -2046,6 +2069,10 @@ function CompartilharWhatsApp({ pedido }: { pedido: Pedido }) {
     for (const item of pedido.itens) {
       const saldo = saldoUn(item, pedido.tipo);
       if (saldo <= 0) continue;
+      if (ehComodato(item)) {
+        linhas.push(`• ${item.nome}: ${num(saldo)} un (comodato)`);
+        continue;
+      }
       linhas.push(
         `• ${item.nome}: ${num(saldo)} un × ${brl(item.precoUn)} = ${brl(
           valorFinalItem(item, pedido.tipo),

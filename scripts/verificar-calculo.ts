@@ -67,7 +67,8 @@ const pedido: Pedido = {
   atualizadoEm: "",
 };
 
-const t = calcularTotais(pedido);
+// Na planilha, bags e caixa térmica entram como item comum (sem regra de comodato).
+const t = calcularTotais(pedido, () => false);
 
 const brl = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
