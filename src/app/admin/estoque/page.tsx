@@ -979,21 +979,20 @@ function EstoquePageInterno() {
                 Quanto tem no galpão agora
               </label>
               <div className="grid grid-cols-2 gap-3">
-                {(produtoSelecionado?.unPorCaixa ?? 1) > 1 && (
-                  <div className="relative min-w-0">
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      inputMode="numeric"
-                      value={contagemCx}
-                      onChange={(e) => setContagemCx(e.target.value)}
-                      placeholder="0"
-                      className="campo block w-full pr-10"
-                    />
-                    <span className="pointer-events-none absolute top-2.5 right-4 text-sm text-texto-suave">cx</span>
-                  </div>
-                )}
+                <div className="relative min-w-0">
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    inputMode="numeric"
+                    value={contagemCx}
+                    onChange={(e) => setContagemCx(e.target.value)}
+                    placeholder="0"
+                    disabled={(produtoSelecionado?.unPorCaixa ?? 1) <= 1}
+                    className="campo block w-full pr-10 disabled:opacity-50"
+                  />
+                  <span className="pointer-events-none absolute top-2.5 right-4 text-sm text-texto-suave">cx</span>
+                </div>
                 <div className="relative min-w-0">
                   <input
                     type="number"
@@ -1046,26 +1045,25 @@ function EstoquePageInterno() {
                   Quantidade ({tipoMovimento === "PERDA" ? "Saída" : "Entrada"})
                 </label>
                 <div className="grid grid-cols-2 gap-3">
-                  {(produtoSelecionado?.unPorCaixa ?? 1) > 1 && (
-                    <div className="relative min-w-0">
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        value={contagemCx}
-                        onChange={(e) => {
-                          setContagemCx(e.target.value);
-                          if (custoUn) {
-                            const novaQtd = Number(e.target.value || 0) * (produtoSelecionado?.unPorCaixa ?? 1) + Number(quantidadeUn || 0);
-                            if (novaQtd > 0) setCustoTotal((Number(custoUn) * novaQtd).toFixed(2));
-                          }
-                        }}
-                        placeholder="0"
-                        className="campo block w-full pr-10"
-                      />
-                      <span className="pointer-events-none absolute top-2.5 right-4 text-sm text-texto-suave">cx</span>
-                    </div>
-                  )}
+                  <div className="relative min-w-0">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={contagemCx}
+                      onChange={(e) => {
+                        setContagemCx(e.target.value);
+                        if (custoUn) {
+                          const novaQtd = Number(e.target.value || 0) * (produtoSelecionado?.unPorCaixa ?? 1) + Number(quantidadeUn || 0);
+                          if (novaQtd > 0) setCustoTotal((Number(custoUn) * novaQtd).toFixed(2));
+                        }
+                      }}
+                      placeholder="0"
+                      disabled={(produtoSelecionado?.unPorCaixa ?? 1) <= 1}
+                      className="campo block w-full pr-10 disabled:opacity-50"
+                    />
+                    <span className="pointer-events-none absolute top-2.5 right-4 text-sm text-texto-suave">cx</span>
+                  </div>
                   <div className="relative min-w-0">
                     <input
                       type="number"
