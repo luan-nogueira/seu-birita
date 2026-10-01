@@ -24,6 +24,7 @@ import { rotaPedido } from "@/lib/rotas";
 import { useAuth } from "@/lib/auth";
 import {
   calcularTotais,
+  foraDoLucroPorCategoria,
   lucroTotal,
   lucroRecebidoTotal,
   pedidoContabilizado,
@@ -31,7 +32,7 @@ import {
 import { brl, dataBR, hojeISO } from "@/lib/format";
 
 export default function InicioPage() {
-  const { pedidos, produtos, clientes, fornecedores, contasPagar, carregando } =
+  const { pedidos, produtos, clientes, fornecedores, contasPagar, produtoPorId, carregando } =
     useDados();
   const { permissoes } = useAuth();
   const [agendarAberto, setAgendarAberto] = useState(false);
@@ -65,8 +66,9 @@ export default function InicioPage() {
   );
   // Lucro proporcional ao que já foi pago — um pedido com pagamento parcial
   // não deve mostrar o lucro do evento inteiro, só o que já entrou.
-  const lucroRecebidoMes = lucroRecebidoTotal(pedidosDoMes);
-  const lucroPrevistoMes = lucroTotal(pedidosDoMes);
+  const foraDoLucro = foraDoLucroPorCategoria(produtoPorId);
+  const lucroRecebidoMes = lucroRecebidoTotal(pedidosDoMes, foraDoLucro);
+  const lucroPrevistoMes = lucroTotal(pedidosDoMes, foraDoLucro);
 
   const hoje = hojeISO();
   const contasPendentes = contasPagar.filter((c) => !c.pago);

@@ -31,6 +31,7 @@ import {
   devolvidoUn,
   efeitoEstoque,
   entregueUn,
+  foraDoLucroPorCategoria,
   margemLucro,
   pedidoContabilizado,
   sobraUn,
@@ -202,7 +203,7 @@ function PedidoPageInterno() {
     );
   }
 
-  const totais = calcularTotais(pedido);
+  const totais = calcularTotais(pedido, foraDoLucroPorCategoria(produtoPorId));
   const consignacao = pedido.tipo === "CONSIGNACAO";
   const remessas = totalRemessas(pedido.itens);
 
@@ -791,6 +792,11 @@ function Resumo({
           <p className="mt-0.5 text-xs text-emerald-600/80 dark:text-emerald-500/80">
             Custo total: {brl(totais.custoTotal)}
           </p>
+          {totais.valorForaDoLucro > 0.005 && (
+            <p className="text-xs text-emerald-600/80 dark:text-emerald-500/80">
+              Sem comodato/estrutura ({brl(totais.valorForaDoLucro)})
+            </p>
+          )}
         </div>
       )}
     </div>

@@ -19,6 +19,7 @@ import { useDados, novoId } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import {
   calcularTotais,
+  foraDoLucroPorCategoria,
   lucroTotal,
   lucroRecebidoTotal,
   pedidoContabilizado,
@@ -69,6 +70,7 @@ function FinanceiroPageInterno() {
     removerContaPagar,
     salvarPedido,
     removerPagamento,
+    produtoPorId,
     carregando,
   } = useDados();
   const { permissoes } = useAuth();
@@ -105,8 +107,9 @@ function FinanceiroPageInterno() {
     }),
     [ativos, dataInicial, dataFinal],
   );
-  const lucroRecebidoMes = lucroRecebidoTotal(pedidosDoMes);
-  const lucroPrevistoMes = lucroTotal(pedidosDoMes);
+  const foraDoLucro = foraDoLucroPorCategoria(produtoPorId);
+  const lucroRecebidoMes = lucroRecebidoTotal(pedidosDoMes, foraDoLucro);
+  const lucroPrevistoMes = lucroTotal(pedidosDoMes, foraDoLucro);
 
   const aReceber = ativos.reduce(
     (s, p) => s + Math.max(0, calcularTotais(p).saldoAberto),

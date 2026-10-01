@@ -7,7 +7,7 @@ import { useDados } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { novoId } from "@/lib/db";
 import { brl, caixasEUnidades, dataBR, dataHoraBR, hojeISO, normalizar } from "@/lib/format";
-import { compararCategorias, estoqueNegativo, semCustoNoEstoque } from "@/lib/calc";
+import { compararCategorias, estoqueNegativo, paraCaixas, semCustoNoEstoque } from "@/lib/calc";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -1448,7 +1448,7 @@ function ModalHistorico({
         )}
         {linhas.some((l) => l.compra) && (
           <p className="-mt-2 text-center text-xs text-texto-suave">
-            Toque numa compra pra mudar o fornecedor ou a forma de pagamento.
+            Toque numa compra pra corrigir quantidade, custo, fornecedor ou pagamento.
           </p>
         )}
       </div>
@@ -1461,6 +1461,25 @@ function ModalHistorico({
       )}
     </Modal>
   );
+}
+
+/**
+ * Troca o "Lançado: 2cx e 3un" do começo da observação pela quantidade
+ * corrigida, mantendo o resto do que foi escrito.
+ */
+function obsComLancado(obs: string | undefined, cx: string, un: string): string | undefined {
+  const resto = (obs ?? "").replace(/^Lançado: [^·]*(· )?/, "").trim();
+  const nCx = Number(cx || 0);
+  const nUn = Number(un || 0);
+  const lancado =
+    nCx && nUn
+      ? `Lançado: ${nCx}cx e ${nUn}un`
+      : nCx
+        ? `Lançado: ${nCx}cx`
+        : nUn
+          ? `Lançado: ${nUn}un`
+          : "";
+  return [lancado, resto].filter(Boolean).join(" · ") || undefined;
 }
 
 /**
@@ -1485,7 +1504,11 @@ function ModalEditarCompra({
     produtoPorId,
     salvarProduto,
     removerMovimento,
+    movimentos,
   } = useDados();
+
+  const produto = produtoPorId(movimento.produtoId);
+  const unPorCaixa = Math.max(1, produto?.unPorCaixa ?? 1);
 
   const contas = useMemo(
     () =>
@@ -1515,12 +1538,66 @@ function ModalEditarCompra({
     ? Math.round(movimento.custoUn * movimento.quantidadeUn * 100) / 100
     : 0;
 
-  const [novaQuantidade, setNovaQuantidade] = useState<number | "">(movimento.quantidadeUn);
-  const [novoValorTotal, setNovoValorTotal] = useState<number | "">(valorTotalInicial || "");
+  // Mesmo formato do lançamento: caixas + unidades soltas, custo por
+  // unidade e total (um recalcula o outro).
+  const qtdInicial = paraCaixas(movimento.quantidadeUn, unPorCaixa);
+  const [cx, setCx] = useState(qtdInicial.cx ? String(qtdInicial.cx) : "");
+  const [un, setUn] = useState(qtdInicial.un ? String(qtdInicial.un) : "");
+  const [custoUn, setCustoUn] = useState(
+    movimento.custoUn ? String(Math.round(movimento.custoUn * 10000) / 10000) : "",
+  );
+  const [valorTotal, setValorTotal] = useState(valorTotalInicial ? String(valorTotalInicial) : "");
+
+  const numQtd = Number(cx || 0) * unPorCaixa + Number(un || 0);
+  const numValorTotal = Number(valorTotal) || 0;
+
+  function mudarQtd(novoCx: string, novoUn: string) {
+    setCx(novoCx);
+    setUn(novoUn);
+    const qtd = Number(novoCx || 0) * unPorCaixa + Number(novoUn || 0);
+    if (custoUn && qtd > 0) setValorTotal((Number(custoUn) * qtd).toFixed(2));
+  }
+
+  function mudarCustoUn(valor: string) {
+    setCustoUn(valor);
+    if (valor && numQtd > 0) setValorTotal((Number(valor) * numQtd).toFixed(2));
+    else if (!valor) setValorTotal("");
+  }
+
+  function mudarValorTotal(valor: string) {
+    setValorTotal(valor);
+    if (valor && numQtd > 0) {
+      setCustoUn((Number(valor) / numQtd).toFixed(4).replace(/0+$/, "").replace(/\.$/, ""));
+    } else if (!valor) {
+      setCustoUn("");
+    }
+  }
+
+  /**
+   * Custo médio do produto, refeito com esta compra corrigida — mesma regra
+   * do lançamento (esta + as 2 compras com custo mais recentes). Só muda se
+   * esta compra ainda está entre as 3 últimas; senão ela já não pesava.
+   */
+  function custoMedioCorrigido(novoCustoUn: number): number | undefined {
+    const ultimas = movimentos
+      .filter((m) => m.produtoId === movimento.produtoId && m.origem === "COMPRA" && m.custoUn !== undefined)
+      .sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
+      .slice(0, 3);
+    if (!ultimas.some((m) => m.id === movimento.id)) return undefined;
+    let soma = 0;
+    let qtd = 0;
+    for (const m of ultimas) {
+      const q = m.id === movimento.id ? numQtd : m.quantidadeUn;
+      const c = m.id === movimento.id ? novoCustoUn : m.custoUn!;
+      if (!c) continue;
+      soma += q * c;
+      qtd += q;
+    }
+    return qtd > 0 ? soma / qtd : undefined;
+  }
 
   async function salvar() {
-    const numQtd = Number(novaQuantidade) || 1;
-    const numValorTotal = Number(novoValorTotal) || 0;
+    if (numQtd <= 0) return;
 
     setSalvando(true);
     try {
@@ -1569,7 +1646,24 @@ function ModalEditarCompra({
         contaPagarIds: ids.length > 0 ? ids : undefined,
         quantidadeUn: numQtd,
         custoUn: numValorTotal > 0 ? numValorTotal / numQtd : 0,
+        obs: obsComLancado(movimento.obs, cx, un),
       });
+
+      // Antes, mudar a quantidade aqui só alterava o lançamento — o estoque
+      // do produto ficava com o número antigo e o custo médio também.
+      if (produto) {
+        const novoCustoUn = numValorTotal > 0 ? numValorTotal / numQtd : 0;
+        const mudouCusto = numQtd !== movimento.quantidadeUn || numValorTotal !== valorTotalInicial;
+        const precoCusto = mudouCusto ? custoMedioCorrigido(novoCustoUn) : undefined;
+        if (numQtd !== movimento.quantidadeUn || precoCusto !== undefined) {
+          await salvarProduto({
+            ...produto,
+            estoqueUn: produto.estoqueUn + (numQtd - movimento.quantidadeUn),
+            precoCusto: precoCusto ?? produto.precoCusto,
+            atualizadoEm: new Date().toISOString(),
+          });
+        }
+      }
       aoFechar();
     } finally {
       setSalvando(false);
@@ -1624,7 +1718,7 @@ function ModalEditarCompra({
             <button className="btn-secundario" onClick={aoFechar} disabled={salvando}>
               Cancelar
             </button>
-            <button className="btn-primario" onClick={salvar} disabled={salvando}>
+            <button className="btn-primario" onClick={salvar} disabled={salvando || numQtd <= 0}>
               {salvando ? "Salvando..." : "Salvar"}
             </button>
           </div>
@@ -1636,26 +1730,73 @@ function ModalEditarCompra({
           Lançada em {dataBR(movimento.data)} · <strong className="text-texto">{movimento.produtoNome}</strong>
         </p>
 
+        <div>
+          <label className="mb-1.5 block text-sm font-semibold">Quantidade</label>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="relative min-w-0">
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={cx}
+                onChange={(e) => mudarQtd(e.target.value, un)}
+                placeholder="0"
+                disabled={unPorCaixa <= 1}
+                className="campo block w-full pr-10 disabled:opacity-50"
+                aria-label="Caixas"
+              />
+              <span className="pointer-events-none absolute top-2.5 right-4 text-sm text-texto-suave">cx</span>
+            </div>
+            <div className="relative min-w-0">
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={un}
+                onChange={(e) => mudarQtd(cx, e.target.value)}
+                placeholder="0"
+                className="campo block w-full pr-10"
+                aria-label="Unidades"
+              />
+              <span className="pointer-events-none absolute top-2.5 right-4 text-sm text-texto-suave">un</span>
+            </div>
+          </div>
+          {unPorCaixa > 1 && numQtd > 0 && (
+            <p className="mt-1 text-xs text-texto-suave">
+              Total: <strong className="text-texto">{numQtd} un</strong> ({unPorCaixa} un/cx)
+            </p>
+          )}
+          {numQtd !== movimento.quantidadeUn && numQtd > 0 && (
+            <p className="mt-1 text-xs text-texto-suave">
+              O estoque do produto vai {numQtd > movimento.quantidadeUn ? "ganhar" : "perder"}{" "}
+              <strong className="text-texto">{Math.abs(numQtd - movimento.quantidadeUn)} un</strong>.
+            </p>
+          )}
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           <div className="min-w-0">
-            <label className="mb-1.5 block text-sm font-semibold">Quantidade (un)</label>
+            <label className="mb-1.5 block text-sm font-semibold">Custo Un (R$)</label>
             <input
               type="number"
-              min="1"
-              className="campo w-full"
-              value={novaQuantidade}
-              onChange={(e) => setNovaQuantidade(e.target.value === "" ? "" : Number(e.target.value))}
+              min="0"
+              step="any"
+              className="campo block w-full"
+              value={custoUn}
+              onChange={(e) => mudarCustoUn(e.target.value)}
+              placeholder="0,00"
             />
           </div>
           <div className="min-w-0">
-            <label className="mb-1.5 block text-sm font-semibold">Valor Total (R$)</label>
+            <label className="mb-1.5 block text-sm font-semibold">Custo Total (R$)</label>
             <input
               type="number"
               min="0"
               step="0.01"
-              className="campo w-full"
-              value={novoValorTotal}
-              onChange={(e) => setNovoValorTotal(e.target.value === "" ? "" : Number(e.target.value))}
+              className="campo block w-full"
+              value={valorTotal}
+              onChange={(e) => mudarValorTotal(e.target.value)}
+              placeholder="0,00"
             />
           </div>
         </div>
@@ -1671,14 +1812,14 @@ function ModalEditarCompra({
           }}
         />
 
-        {Number(novoValorTotal) > 0 ? (
+        {numValorTotal > 0 ? (
           <CamposPagamento
             podePrazo={permissoes.financeiro}
             pagamento={pagamento}
             setPagamento={setPagamento}
             vencimentos={vencimentos}
             setVencimentos={setVencimentos}
-            valorTotal={Number(novoValorTotal)}
+            valorTotal={numValorTotal}
             bloqueado={
               algumaPaga
                 ? "Já tem parcela paga no Financeiro — a forma de pagamento não pode mais mudar por aqui."

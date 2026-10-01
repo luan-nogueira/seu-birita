@@ -97,12 +97,29 @@ export interface TotaisPedido {
   unidadesEntregues: number;
   unidadesDevolvidas: number;
   unidadesConsumidas: number;
-  /** Custo total da mercadoria consumida (lucro = valorFinal - desconto - custoTotal). */
+  /** Custo da mercadoria consumida que entra no lucro (sem comodato/estrutura). */
   custoTotal: number;
+  /** Consumo de comodato/estrutura — o cliente paga, mas fica fora do lucro. */
+  valorForaDoLucro: number;
+  /** valorFinal - valorForaDoLucro - desconto - custoTotal */
   lucro: number;
 }
 
-export function calcularTotais(pedido: Pedido): TotaisPedido {
+/** Diz se um item do pedido fica fora do lucro (ver foraDoLucroPorCategoria). */
+export type ForaDoLucro = (item: PedidoItem) => boolean;
+
+/**
+ * Comodato e estrutura são aluguel de equipamento, não revenda: o valor
+ * cobrado entrava inteiro como lucro (custo zero) e inflava a margem do
+ * evento. A categoria vem do cadastro do produto, que o item não guarda.
+ */
+export function foraDoLucroPorCategoria(
+  produtoPorId: (id: string) => Produto | undefined,
+): ForaDoLucro {
+  return (item) => categoriaComodato(produtoPorId(item.produtoId)?.categoria ?? "");
+}
+
+export function calcularTotais(pedido: Pedido, foraDoLucro?: ForaDoLucro): TotaisPedido {
   const { tipo, itens } = pedido;
 
   let valorPedido = 0;
@@ -110,13 +127,18 @@ export function calcularTotais(pedido: Pedido): TotaisPedido {
   let unidadesEntregues = 0;
   let unidadesDevolvidas = 0;
   let custoTotal = 0;
+  let valorForaDoLucro = 0;
 
   for (const item of itens) {
     valorPedido += valorPedidoItem(item);
     valorFinal += valorFinalItem(item, tipo);
     unidadesEntregues += entregueUn(item);
     unidadesDevolvidas += devolvidoUn(item, tipo);
-    custoTotal += saldoUn(item, tipo) * (item.custoUn || 0);
+    if (foraDoLucro?.(item)) {
+      valorForaDoLucro += valorFinalItem(item, tipo);
+    } else {
+      custoTotal += saldoUn(item, tipo) * (item.custoUn || 0);
+    }
   }
 
   const desconto = pedido.desconto || 0;
@@ -137,13 +159,14 @@ export function calcularTotais(pedido: Pedido): TotaisPedido {
     unidadesDevolvidas,
     unidadesConsumidas: unidadesEntregues - unidadesDevolvidas,
     custoTotal,
-    lucro: valorFinal - desconto - custoTotal,
+    valorForaDoLucro,
+    lucro: valorFinal - valorForaDoLucro - desconto - custoTotal,
   };
 }
 
 /** Margem de lucro sobre o que o cliente paga (lucro ÷ valor líquido), em %. */
 export function margemLucro(t: TotaisPedido): number {
-  const receita = t.valorFinal - t.desconto;
+  const receita = t.valorFinal - t.valorForaDoLucro - t.desconto;
   if (receita <= 0) return 0;
   return (t.lucro / receita) * 100;
 }
@@ -158,8 +181,8 @@ export function pedidoContabilizado(pedido: Pick<Pedido, "status">): boolean {
 }
 
 /** Soma o lucro (calcularTotais) de uma lista de pedidos — lucro cheio, mesmo sem ter recebido ainda. */
-export function lucroTotal(pedidos: Pedido[]): number {
-  return pedidos.reduce((soma, p) => soma + calcularTotais(p).lucro, 0);
+export function lucroTotal(pedidos: Pedido[], foraDoLucro?: ForaDoLucro): number {
+  return pedidos.reduce((soma, p) => soma + calcularTotais(p, foraDoLucro).lucro, 0);
 }
 
 /**
@@ -167,15 +190,15 @@ export function lucroTotal(pedidos: Pedido[]): number {
  * pedido, conta só metade do lucro. Sem isso, um pedido de R$1.900 com
  * apenas R$900 recebidos já aparecia com o lucro do evento inteiro.
  */
-export function lucroRecebido(pedido: Pedido): number {
-  const t = calcularTotais(pedido);
+export function lucroRecebido(pedido: Pedido, foraDoLucro?: ForaDoLucro): number {
+  const t = calcularTotais(pedido, foraDoLucro);
   if (t.totalReceber <= 0) return 0;
   const fracaoPaga = Math.min(1, Math.max(0, t.valorPago / t.totalReceber));
   return t.lucro * fracaoPaga;
 }
 
-export function lucroRecebidoTotal(pedidos: Pedido[]): number {
-  return pedidos.reduce((soma, p) => soma + lucroRecebido(p), 0);
+export function lucroRecebidoTotal(pedidos: Pedido[], foraDoLucro?: ForaDoLucro): number {
+  return pedidos.reduce((soma, p) => soma + lucroRecebido(p, foraDoLucro), 0);
 }
 
 /**
@@ -223,17 +246,17 @@ const ORDEM_FIM = ["gelo", "descartaveis", "estrutura", "comodato", "estrutura e
 
 /**
  * Comodato e estrutura (bags, bistrôs, caixa térmica…) vão e voltam dos
- * eventos e não são mercadoria vendida — ficar negativo neles não é erro
- * de lançamento, então não entram no aviso de estoque negativo.
+ * eventos e não são mercadoria vendida — ficam fora do aviso de estoque
+ * negativo e do lucro do pedido.
  */
-export function categoriaSemAvisoNegativo(categoria: string): boolean {
+export function categoriaComodato(categoria: string): boolean {
   const c = normalizar(categoria || "");
   return c.includes("comodato") || c.includes("estrutura");
 }
 
 /** Estoque negativo que merece aviso (fora comodato/estrutura). */
 export function estoqueNegativo(produto: Produto): boolean {
-  return produto.estoqueUn < 0 && !categoriaSemAvisoNegativo(produto.categoria);
+  return produto.estoqueUn < 0 && !categoriaComodato(produto.categoria);
 }
 
 export function compararCategorias(a: string, b: string): number {
