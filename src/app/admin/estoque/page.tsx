@@ -1456,10 +1456,8 @@ function ModalHistorico({
 }
 
 /**
- * Corrige fornecedor e forma de pagamento de uma compra já lançada.
- * Quantidade e custo não mudam aqui (mexeriam no estoque e no custo médio).
- * Se já tem parcela paga, só o fornecedor pode mudar — refazer as parcelas
- * apagaria um pagamento já registrado.
+ * Corrige fornecedor, quantidade, valor e forma de pagamento de uma compra já lançada.
+ * Se já tem parcela paga, a forma de pagamento e parcelas não são recriadas.
  */
 function ModalEditarCompra({
   movimento,
@@ -1502,11 +1500,17 @@ function ModalEditarCompra({
   const [vencimentos, setVencimentos] = useState<string[]>(inicial.vencimentos);
   const [salvando, setSalvando] = useState(false);
 
-  const valorTotal = movimento.custoUn
+  const valorTotalInicial = movimento.custoUn
     ? Math.round(movimento.custoUn * movimento.quantidadeUn * 100) / 100
     : 0;
 
+  const [novaQuantidade, setNovaQuantidade] = useState<number | "">(movimento.quantidadeUn);
+  const [novoValorTotal, setNovoValorTotal] = useState<number | "">(valorTotalInicial || "");
+
   async function salvar() {
+    const numQtd = Number(novaQuantidade) || 1;
+    const numValorTotal = Number(novoValorTotal) || 0;
+
     setSalvando(true);
     try {
       const fornecedor = await resolverFornecedor(
@@ -1516,28 +1520,27 @@ function ModalEditarCompra({
         novoNome,
       );
 
-      const mudouPagamento =
+      const mudouPagamentoOuValor =
         pagamento !== inicial.pagamento ||
-        (pagamento === "PRAZO" &&
-          vencimentos.join() !== inicial.vencimentos.join());
+        (pagamento === "PRAZO" && vencimentos.join() !== inicial.vencimentos.join()) ||
+        numValorTotal !== valorTotalInicial;
 
       let ids = contas.map((c) => c.id);
-      if (mudouPagamento && !algumaPaga) {
-        // Refaz as parcelas do zero conforme a escolha nova.
+      if (mudouPagamentoOuValor && !algumaPaga) {
+        // Refaz as parcelas do zero conforme a escolha nova ou o novo valor.
         for (const id of ids) await removerContaPagar(id);
         ids = [];
-        if (pagamento === "PRAZO" && valorTotal > 0) {
+        if (pagamento === "PRAZO" && numValorTotal > 0) {
           ids = await criarContasPrazo(salvarContaPagar, {
-            valorTotal,
+            valorTotal: numValorTotal,
             vencimentos,
-            descricao: `Compra: ${movimento.quantidadeUn} un de ${movimento.produtoNome}`,
+            descricao: `Compra: ${numQtd} un de ${movimento.produtoNome}`,
             fornecedor,
             obs: movimento.obs,
           });
         }
       } else {
-        // Só o fornecedor mudou: atualiza nas contas que já existem (quem não
-        // tem Financeiro não pode gravar lá — a conta fica com o nome antigo).
+        // Só o fornecedor mudou ou valor/pagamento mudou mas algumaPaga é true.
         for (const c of permissoes.financeiro ? contas : []) {
           await salvarContaPagar({
             ...c,
@@ -1553,6 +1556,8 @@ function ModalEditarCompra({
         pagamento: algumaPaga ? movimento.pagamento : pagamento,
         contaPagarId: undefined,
         contaPagarIds: ids.length > 0 ? ids : undefined,
+        quantidadeUn: numQtd,
+        custoUn: numValorTotal > 0 ? numValorTotal / numQtd : 0,
       });
       aoFechar();
     } finally {
@@ -1578,10 +1583,32 @@ function ModalEditarCompra({
     >
       <div className="space-y-5">
         <p className="text-sm text-texto-suave">
-          {movimento.quantidadeUn} un de <strong className="text-texto">{movimento.produtoNome}</strong>{" "}
-          em {dataBR(movimento.data)}
-          {valorTotal > 0 && ` · total ${brl(valorTotal)}`}
+          Lançada em {dataBR(movimento.data)} · <strong className="text-texto">{movimento.produtoNome}</strong>
         </p>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="min-w-0">
+            <label className="mb-1.5 block text-sm font-semibold">Quantidade (un)</label>
+            <input
+              type="number"
+              min="1"
+              className="campo w-full"
+              value={novaQuantidade}
+              onChange={(e) => setNovaQuantidade(e.target.value === "" ? "" : Number(e.target.value))}
+            />
+          </div>
+          <div className="min-w-0">
+            <label className="mb-1.5 block text-sm font-semibold">Valor Total (R$)</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              className="campo w-full"
+              value={novoValorTotal}
+              onChange={(e) => setNovoValorTotal(e.target.value === "" ? "" : Number(e.target.value))}
+            />
+          </div>
+        </div>
 
         <CampoFornecedor
           fornecedores={fornecedores}
@@ -1594,14 +1621,14 @@ function ModalEditarCompra({
           }}
         />
 
-        {valorTotal > 0 ? (
+        {Number(novoValorTotal) > 0 ? (
           <CamposPagamento
             podePrazo={permissoes.financeiro}
             pagamento={pagamento}
             setPagamento={setPagamento}
             vencimentos={vencimentos}
             setVencimentos={setVencimentos}
-            valorTotal={valorTotal}
+            valorTotal={Number(novoValorTotal)}
             bloqueado={
               algumaPaga
                 ? "Já tem parcela paga no Financeiro — a forma de pagamento não pode mais mudar por aqui."
@@ -1612,7 +1639,7 @@ function ModalEditarCompra({
           />
         ) : (
           <p className="text-xs text-texto-suave">
-            Essa compra foi lançada sem custo, então não dá pra gerar conta a pagar.
+            Essa compra está sendo lançada sem custo, então não dá pra gerar conta a pagar.
           </p>
         )}
       </div>
