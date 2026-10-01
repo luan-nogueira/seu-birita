@@ -1472,6 +1472,9 @@ function ModalEditarCompra({
     salvarContaPagar,
     removerContaPagar,
     salvarMovimento,
+    produtoPorId,
+    salvarProduto,
+    removerMovimento,
   } = useDados();
 
   const contas = useMemo(
@@ -1569,14 +1572,53 @@ function ModalEditarCompra({
       aoFechar={() => !salvando && aoFechar()}
       titulo="Editar compra"
       rodape={
-        <>
-          <button className="btn-secundario" onClick={aoFechar} disabled={salvando}>
-            Cancelar
+        <div className="flex w-full items-center justify-between">
+          <button
+            type="button"
+            className="text-sm font-semibold text-red-600 hover:underline dark:text-red-400"
+            onClick={async () => {
+              if (algumaPaga) {
+                if (!window.confirm("Essa compra tem parcelas já pagas no financeiro. Tem certeza que quer excluir o lançamento do estoque? As contas a pagar NÃO serão apagadas.")) return;
+              } else {
+                if (!window.confirm("Tem certeza que deseja excluir esta compra? O estoque vai ser ajustado de volta e as contas a pagar canceladas.")) return;
+              }
+              setSalvando(true);
+              try {
+                const produto = produtoPorId(movimento.produtoId);
+                if (produto) {
+                  const sinal = movimento.tipo === "SAIDA" ? 1 : -1;
+                  await salvarProduto({
+                    ...produto,
+                    estoqueUn: produto.estoqueUn + (movimento.quantidadeUn * sinal),
+                    atualizadoEm: new Date().toISOString()
+                  });
+                }
+                if (!algumaPaga) {
+                  for (const c of contas) {
+                    await removerContaPagar(c.id);
+                  }
+                }
+                await removerMovimento(movimento.id);
+                aoFechar();
+              } catch (e) {
+                alert("Erro ao excluir: " + (e as Error).message);
+              } finally {
+                setSalvando(false);
+              }
+            }}
+            disabled={salvando}
+          >
+            Excluir
           </button>
-          <button className="btn-primario" onClick={salvar} disabled={salvando}>
-            {salvando ? "Salvando..." : "Salvar"}
-          </button>
-        </>
+          <div className="flex gap-2">
+            <button className="btn-secundario" onClick={aoFechar} disabled={salvando}>
+              Cancelar
+            </button>
+            <button className="btn-primario" onClick={salvar} disabled={salvando}>
+              {salvando ? "Salvando..." : "Salvar"}
+            </button>
+          </div>
+        </div>
       }
     >
       <div className="space-y-5">
