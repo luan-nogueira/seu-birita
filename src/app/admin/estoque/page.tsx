@@ -488,6 +488,20 @@ function EstoquePageInterno() {
     return Number(contagemCx || 0) * porCaixa + Number(quantidadeUn || 0);
   }, [quantidadeUn, contagemCx, produtoSelecionado]);
 
+  // Quanto o histórico diz que o produto selecionado tem: tudo que entrou
+  // menos o que saiu. Deveria ser igual ao estoqueUn — quando não é, o
+  // número do estoque se perdeu em algum lançamento (ex.: compra editada na
+  // versão que ainda não mexia no estoque). Lançamento de pedido excluído
+  // fica de fora: o estoque dele já foi devolvido na exclusão.
+  const historicoSelecionado = useMemo(() => {
+    if (!produtoSelecionado) return 0;
+    const idsOrfaos = new Set(orfaos.map((m) => m.id));
+    return movimentos.reduce((soma, m) => {
+      if (m.produtoId !== produtoSelecionado.id || idsOrfaos.has(m.id)) return soma;
+      return soma + (m.tipo === "SAIDA" ? -m.quantidadeUn : m.quantidadeUn);
+    }, 0);
+  }, [produtoSelecionado, movimentos, orfaos]);
+
   const qtdCalculada = useMemo(() => {
     const porCaixa = produtoSelecionado?.unPorCaixa ?? 1;
     return Number(contagemCx || 0) * porCaixa + Number(quantidadeUn || 0);
@@ -554,29 +568,41 @@ function EstoquePageInterno() {
 
   async function lancarAjuste(produto: Produto) {
     if (contagem === null || contagem < 0) return;
-    const diferenca = contagem - produto.estoqueUn;
-    if (diferenca === 0) {
+    // O lançamento é a diferença pro histórico, não pro estoqueUn. Quando o
+    // estoque estava errado mas o histórico certo (84 no sistema, 120 de
+    // compra, 120 contados), lançar "+36" fazia o histórico somar 156 com
+    // 120 no estoque. Assim, depois de um ajuste o histórico sempre fecha
+    // com o estoque.
+    const historico = historicoSelecionado;
+    const diferenca = contagem - historico;
+    if (diferenca === 0 && contagem === produto.estoqueUn) {
       window.alert("A contagem bate com o estoque do sistema — nada a ajustar.");
       return;
     }
-    await salvarMovimento({
-      id: novoId(),
-      produtoId: produto.id,
-      produtoNome: produto.nome,
-      tipo: diferenca > 0 ? "ENTRADA" : "SAIDA",
-      origem: "AJUSTE",
-      quantidadeUn: Math.abs(diferenca),
-      data: hojeISO(),
-      obs: [`Contagem: ${contagem} un (sistema tinha ${produto.estoqueUn})`, obs]
-        .filter(Boolean)
-        .join(" · "),
-      criadoEm: new Date().toISOString(),
-    });
-    await salvarProduto({
-      ...produto,
-      estoqueUn: contagem,
-      atualizadoEm: new Date().toISOString(),
-    });
+    if (diferenca !== 0) {
+      const antes =
+        historico === produto.estoqueUn
+          ? `sistema tinha ${produto.estoqueUn}`
+          : `sistema tinha ${produto.estoqueUn}, histórico somava ${historico}`;
+      await salvarMovimento({
+        id: novoId(),
+        produtoId: produto.id,
+        produtoNome: produto.nome,
+        tipo: diferenca > 0 ? "ENTRADA" : "SAIDA",
+        origem: "AJUSTE",
+        quantidadeUn: Math.abs(diferenca),
+        data: hojeISO(),
+        obs: [`Contagem: ${contagem} un (${antes})`, obs].filter(Boolean).join(" · "),
+        criadoEm: new Date().toISOString(),
+      });
+    }
+    if (contagem !== produto.estoqueUn) {
+      await salvarProduto({
+        ...produto,
+        estoqueUn: contagem,
+        atualizadoEm: new Date().toISOString(),
+      });
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -1099,6 +1125,15 @@ function EstoquePageInterno() {
                     </strong>
                     .
                   </p>
+                  {historicoSelecionado !== produtoSelecionado.estoqueUn && (
+                    <p className="text-xs text-texto-suave">
+                      {contagem === historicoSelecionado
+                        ? `O histórico já soma ${contagem} un — só o número do estoque é corrigido.`
+                        : `O histórico soma ${historicoSelecionado} un — o lançamento vai ser de ${
+                            contagem - historicoSelecionado > 0 ? "+" : ""
+                          }${contagem - historicoSelecionado} un.`}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
