@@ -576,6 +576,16 @@ function EstoquePageInterno() {
         ? await resolverFornecedor(fornecedores, salvarFornecedor, fornecedorId, novoFornecedor)
         : {};
 
+      let textoLancado = "";
+      if (contagemCx && quantidadeUn) {
+        textoLancado = `Lançado: ${contagemCx}cx e ${quantidadeUn}un`;
+      } else if (contagemCx) {
+        textoLancado = `Lançado: ${contagemCx}cx`;
+      } else if (quantidadeUn) {
+        textoLancado = `Lançado: ${quantidadeUn}un`;
+      }
+      const obsFinal = [textoLancado, obs].filter(Boolean).join(" · ");
+
       // Compra a prazo vira conta(s) a pagar no Financeiro, uma por parcela.
       let contaPagarIds: string[] | undefined;
       if (compra && pagamento === "PRAZO" && permissoes.financeiro && Number(custoTotal) > 0) {
@@ -584,7 +594,7 @@ function EstoquePageInterno() {
           vencimentos,
           descricao: `Compra: ${qtd} un de ${produto.nome}`,
           fornecedor,
-          obs,
+          obs: obsFinal,
         });
       }
 
@@ -608,7 +618,7 @@ function EstoquePageInterno() {
         // o timestamp UTC já vira o dia seguinte e a movimentação aparecia
         // com a data errada no histórico.
         data: hojeISO(),
-        obs: obs || undefined,
+        obs: obsFinal || undefined,
         criadoEm: new Date().toISOString(),
       });
 
