@@ -397,6 +397,7 @@ function EstoquePageInterno() {
 
   const [busca, setBusca] = useState("");
   const [soSemCusto, setSoSemCusto] = useState(false);
+  const [soNegativos, setSoNegativos] = useState(false);
   const [produtoHistorico, setProdutoHistorico] = useState<Produto | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -440,9 +441,10 @@ function EstoquePageInterno() {
   const [pagamento, setPagamento] = useState<FormaCompra>("AVISTA");
   const [vencimentos, setVencimentos] = useState<string[]>(() => [somarDias(hojeISO(), 30)]);
   const [quantidadeUn, setQuantidadeUn] = useState("");
-  // Só no Ajuste: contagem do galpão em caixas (as unidades soltas vão em quantidadeUn).
+  // Contagem do galpão em caixas (as unidades soltas vão em quantidadeUn).
   const [contagemCx, setContagemCx] = useState("");
   const [custoTotal, setCustoTotal] = useState("");
+  const [custoUn, setCustoUn] = useState("");
   const [obs, setObs] = useState("");
   const [buscaProduto, setBuscaProduto] = useState("");
   const [focoBusca, setFocoBusca] = useState(false);
@@ -457,6 +459,11 @@ function EstoquePageInterno() {
     return Number(contagemCx || 0) * porCaixa + Number(quantidadeUn || 0);
   }, [quantidadeUn, contagemCx, produtoSelecionado]);
 
+  const qtdCalculada = useMemo(() => {
+    const porCaixa = produtoSelecionado?.unPorCaixa ?? 1;
+    return Number(contagemCx || 0) * porCaixa + Number(quantidadeUn || 0);
+  }, [quantidadeUn, contagemCx, produtoSelecionado]);
+
   const produtosOrdenados = [...produtos].filter((p) => p.ativo);
   const produtosFiltrados = produtosOrdenados.filter((p) =>
     p.nome.toLowerCase().includes(buscaProduto.toLowerCase()),
@@ -467,24 +474,27 @@ function EstoquePageInterno() {
     return produtosOrdenados.filter(
       (p) =>
         (!soSemCusto || semCustoNoEstoque(p)) &&
+        (!soNegativos || p.estoqueUn < 0) &&
         (!termo || normalizar(p.nome).includes(termo) || normalizar(p.categoria).includes(termo)),
     );
-  }, [produtosOrdenados, busca, soSemCusto]);
+  }, [produtosOrdenados, busca, soSemCusto, soNegativos]);
 
   // Valor do que está parado no galpão. Estoque negativo não conta (é erro
   // de lançamento, não mercadoria) e produto sem custo cadastrado entra como
-  // zero no custo — por isso o aviso com a contagem deles.
+  // zero no custo — por isso os avisos com a contagem de cada um.
   const valorEstoque = useMemo(() => {
     let custo = 0;
     let venda = 0;
     let semCusto = 0;
+    let negativos = 0;
     for (const p of produtosOrdenados) {
+      if (p.estoqueUn < 0) negativos++;
       if (p.estoqueUn <= 0) continue;
       custo += p.estoqueUn * (p.precoCusto || 0);
       venda += p.estoqueUn * (p.precoUn || 0);
       if (semCustoNoEstoque(p)) semCusto++;
     }
-    return { custo, venda, semCusto };
+    return { custo, venda, semCusto, negativos };
   }, [produtosOrdenados]);
 
   const agrupados = useMemo(() => {
@@ -508,6 +518,7 @@ function EstoquePageInterno() {
     setQuantidadeUn("");
     setContagemCx("");
     setCustoTotal("");
+    setCustoUn("");
     setObs("");
     setTipoMovimento("COMPRA");
   }
@@ -555,8 +566,8 @@ function EstoquePageInterno() {
       return;
     }
 
-    const qtd = Number(quantidadeUn);
-    if (!quantidadeUn || qtd <= 0) return;
+    const qtd = qtdCalculada;
+    if (qtd <= 0) return;
     const compra = tipoMovimento === "COMPRA";
 
     setSalvando(true);
@@ -682,7 +693,10 @@ function EstoquePageInterno() {
               {valorEstoque.semCusto > 0 && (
                 <button
                   type="button"
-                  onClick={() => setSoSemCusto(true)}
+                  onClick={() => {
+                    setSoNegativos(false);
+                    setSoSemCusto(true);
+                  }}
                   className="mt-0.5 text-left text-xs font-semibold text-acento underline underline-offset-2"
                 >
                   {valorEstoque.semCusto} produto(s) sem custo cadastrado — ver quais
@@ -699,6 +713,49 @@ function EstoquePageInterno() {
             </p>
           </div>
         </div>
+
+        {valorEstoque.negativos > 0 && !soNegativos && (
+          <button
+            type="button"
+            onClick={() => {
+              setSoSemCusto(false);
+              setSoNegativos(true);
+            }}
+            className="-mt-2 mb-4 flex items-center gap-1.5 text-left text-xs font-semibold text-red-600 underline underline-offset-2 dark:text-red-400"
+          >
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            {valorEstoque.negativos} produto(s) com estoque negativo, fora da conta — ver quais
+          </button>
+        )}
+
+        {soNegativos && (
+          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm dark:border-red-900/50 dark:bg-red-950/30">
+            <span className="min-w-0 flex-1">
+              <span className="block font-semibold">Só os produtos com estoque negativo</span>
+              <span className="block text-xs text-texto-suave">
+                Não entram no valor do estoque. Conte no galpão e lance um Ajuste
+                com o que tem de verdade.
+              </span>
+            </span>
+            <button
+              type="button"
+              className="btn-primario shrink-0 text-xs"
+              onClick={() => {
+                setTipoMovimento("AJUSTE");
+                setModalAberto(true);
+              }}
+            >
+              Lançar ajuste
+            </button>
+            <button
+              type="button"
+              className="btn-secundario shrink-0 text-xs"
+              onClick={() => setSoNegativos(false)}
+            >
+              Mostrar todos
+            </button>
+          </div>
+        )}
 
         {soSemCusto && (
           <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-ouro-300 bg-ouro-50 px-4 py-3 text-sm dark:bg-ouro-900/20">
@@ -741,7 +798,9 @@ function EstoquePageInterno() {
             <p className="font-bold">
               {soSemCusto
                 ? "Todos os produtos em estoque já têm custo"
-                : "Nenhum produto encontrado"}
+                : soNegativos
+                  ? "Nenhum produto com estoque negativo"
+                  : "Nenhum produto encontrado"}
             </p>
           </div>
         ) : (
@@ -835,7 +894,7 @@ function EstoquePageInterno() {
               disabled={
                 salvando ||
                 !produtoId ||
-                (tipoMovimento === "AJUSTE" ? contagem === null : !quantidadeUn)
+                (tipoMovimento === "AJUSTE" ? contagem === null : qtdCalculada <= 0)
               }
               className="btn-primario px-6 py-2"
             >
@@ -981,39 +1040,99 @@ function EstoquePageInterno() {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-4">
               <div>
                 <label className="mb-1.5 block text-sm font-semibold">
                   Quantidade ({tipoMovimento === "PERDA" ? "Saída" : "Entrada"})
                 </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={quantidadeUn}
-                    onChange={(e) => setQuantidadeUn(e.target.value)}
-                    required
-                    placeholder="0"
-                    className="campo block w-full pr-12"
-                  />
-                  <span className="absolute right-4 top-2.5 text-sm text-texto-suave pointer-events-none">un</span>
+                <div className="grid grid-cols-2 gap-3">
+                  {(produtoSelecionado?.unPorCaixa ?? 1) > 1 && (
+                    <div className="relative min-w-0">
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={contagemCx}
+                        onChange={(e) => {
+                          setContagemCx(e.target.value);
+                          if (custoUn) {
+                            const novaQtd = Number(e.target.value || 0) * (produtoSelecionado?.unPorCaixa ?? 1) + Number(quantidadeUn || 0);
+                            if (novaQtd > 0) setCustoTotal((Number(custoUn) * novaQtd).toFixed(2));
+                          }
+                        }}
+                        placeholder="0"
+                        className="campo block w-full pr-10"
+                      />
+                      <span className="pointer-events-none absolute top-2.5 right-4 text-sm text-texto-suave">cx</span>
+                    </div>
+                  )}
+                  <div className="relative min-w-0">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={quantidadeUn}
+                      onChange={(e) => {
+                        setQuantidadeUn(e.target.value);
+                        if (custoUn) {
+                          const novaQtd = Number(contagemCx || 0) * (produtoSelecionado?.unPorCaixa ?? 1) + Number(e.target.value || 0);
+                          if (novaQtd > 0) setCustoTotal((Number(custoUn) * novaQtd).toFixed(2));
+                        }
+                      }}
+                      placeholder="0"
+                      className="campo block w-full pr-10"
+                    />
+                    <span className="pointer-events-none absolute top-2.5 right-4 text-sm text-texto-suave">un</span>
+                  </div>
                 </div>
+                {produtoSelecionado && qtdCalculada > 0 && (produtoSelecionado?.unPorCaixa ?? 1) > 1 && (
+                  <p className="mt-1 text-xs text-texto-suave">
+                    Total: <strong className="text-texto">{qtdCalculada} un</strong>
+                  </p>
+                )}
               </div>
 
               {tipoMovimento === "COMPRA" && (
-                <div>
-                  <label className="mb-1.5 block text-sm font-semibold">Custo Total (R$)</label>
-                  <input
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    value={custoTotal}
-                    onChange={(e) => setCustoTotal(e.target.value)}
-                    required
-                    placeholder="0,00"
-                    className="campo block w-full"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-semibold">Custo Un (R$)</label>
+                    <input
+                      type="number"
+                      min="0.0001"
+                      step="any"
+                      value={custoUn}
+                      onChange={(e) => {
+                         setCustoUn(e.target.value);
+                         if (e.target.value && qtdCalculada > 0) {
+                           setCustoTotal((Number(e.target.value) * qtdCalculada).toFixed(2));
+                         } else if (!e.target.value) {
+                           setCustoTotal("");
+                         }
+                      }}
+                      placeholder="0,00"
+                      className="campo block w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-semibold">Custo Total (R$)</label>
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={custoTotal}
+                      onChange={(e) => {
+                         setCustoTotal(e.target.value);
+                         if (e.target.value && qtdCalculada > 0) {
+                           setCustoUn((Number(e.target.value) / qtdCalculada).toFixed(4).replace(/0+$/, '').replace(/\.$/, ''));
+                         } else if (!e.target.value) {
+                           setCustoUn("");
+                         }
+                      }}
+                      required
+                      placeholder="0,00"
+                      className="campo block w-full"
+                    />
+                  </div>
                 </div>
               )}
             </div>
@@ -1030,7 +1149,7 @@ function EstoquePageInterno() {
             />
           )}
 
-          {tipoMovimento === "COMPRA" && quantidadeUn && custoTotal && (
+          {tipoMovimento === "COMPRA" && qtdCalculada > 0 && custoTotal && (
             <div className="bg-emerald-50 dark:bg-emerald-950/30 p-3 rounded-xl border border-emerald-200 dark:border-emerald-900/50 flex items-center gap-3">
               <div className="bg-emerald-100 dark:bg-emerald-900 text-emerald-600 dark:text-emerald-400 p-2 rounded-lg shrink-0">
                 <RefreshCcw className="w-5 h-5" />
@@ -1038,7 +1157,7 @@ function EstoquePageInterno() {
               <p className="text-xs text-emerald-800 dark:text-emerald-300">
                 Isso atualizará o <strong>Custo Médio Ponderado</strong> do produto. <br />
                 O custo unitário dessa compra saiu a{" "}
-                <strong>{brl(Number(custoTotal) / Number(quantidadeUn))}</strong>.
+                <strong>{brl(Number(custoTotal) / qtdCalculada)}</strong>.
               </p>
             </div>
           )}

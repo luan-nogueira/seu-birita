@@ -394,6 +394,11 @@ function ProdutosPageInterno() {
                           sem custo
                         </span>
                       )}
+                      {p.estoqueUn < 0 && (
+                        <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-600 uppercase dark:bg-red-950 dark:text-red-400" title="Foi vendido mais do que tinha no sistema">
+                          Estoque Negativo
+                        </span>
+                      )}
                     </div>
                     <p className="mt-0.5 text-xs text-texto-suave">
                       {p.unPorCaixa > 1
