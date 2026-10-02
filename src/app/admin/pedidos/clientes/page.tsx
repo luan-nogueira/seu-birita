@@ -4,20 +4,19 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRightCircle,
-  Check,
   CheckCircle,
   Clock,
   ExternalLink,
   MessageCircle,
   Package,
   Phone,
-  Share2,
   ShoppingBag,
   Trash2,
   XCircle,
 } from "lucide-react";
 import { Cabecalho, Modal } from "@/components/ui";
 import { Protegido } from "@/components/Protegido";
+import { CompartilharTabelas } from "@/components/BotaoCompartilharTabela";
 import { useDados, novoId } from "@/lib/store";
 import { rotaPedido } from "@/lib/rotas";
 import { calcularTotais, efeitoEstoque } from "@/lib/calc";
@@ -248,14 +247,7 @@ function PedidosClientesPageInterno() {
       />
 
       <div className="px-4 md:px-6">
-        <p className="mb-2 text-xs font-semibold tracking-wide text-texto-suave uppercase">
-          Compartilhar tabela de preços
-        </p>
-        <div className="mb-4 flex flex-wrap gap-2">
-          <BotaoCompartilharTabela tabela={1} />
-          <BotaoCompartilharTabela tabela={2} />
-          <BotaoCompartilharTabela tabela={3} />
-        </div>
+        <CompartilharTabelas />
       </div>
 
       <div className="space-y-4 px-4 md:px-6">
@@ -569,42 +561,6 @@ function PedidosClientesPageInterno() {
 /* -------------------------------------------------------------------------- */
 /* Helper                                                                       */
 /* -------------------------------------------------------------------------- */
-
-/** Botão que compartilha (ou copia) o link da tabela de preços com o preço daquela tabela. */
-function BotaoCompartilharTabela({ tabela }: { tabela: 1 | 2 | 3 }) {
-  const [copiado, setCopiado] = useState(false);
-
-  async function compartilhar() {
-    const sufixo = tabela === 1 ? "" : `?tabela=${tabela}`;
-    const url = `${window.location.origin}/${sufixo}`;
-
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: "Seu Birita — Tabela de preços", url });
-        return;
-      } catch {
-        // Cancelou o compartilhamento — não faz nada.
-        return;
-      }
-    }
-
-    await navigator.clipboard.writeText(url);
-    setCopiado(true);
-    setTimeout(() => setCopiado(false), 2000);
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={compartilhar}
-      className="btn-secundario text-sm"
-    >
-      {copiado ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
-      Tabela {tabela}
-      {copiado && <span className="text-xs">· copiado!</span>}
-    </button>
-  );
-}
 
 function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
   return (

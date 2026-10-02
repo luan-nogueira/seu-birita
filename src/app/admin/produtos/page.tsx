@@ -4,24 +4,26 @@ import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Boxes,
-  Download,
   Eye,
   EyeOff,
+  FileUp,
   Package,
   Pencil,
   Plus,
   Search,
+  Tags,
   Trash2,
   Upload,
 } from "lucide-react";
 import { Cabecalho, Modal, Vazio } from "@/components/ui";
 import { Protegido } from "@/components/Protegido";
+import { CompartilharTabelas } from "@/components/BotaoCompartilharTabela";
 import { useDados, novoId } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { firebaseConfigurado } from "@/lib/firebase";
 import { brl, dataBR, normalizar, paraCampo, paraNumero } from "@/lib/format";
 import { compararCategorias, estoqueNegativo, semCustoNoEstoque } from "@/lib/calc";
-import { CATEGORIAS_PADRAO, semearProdutos } from "@/lib/db/seed";
+import { CATEGORIAS_PADRAO } from "@/lib/db/seed";
 import type { Produto } from "@/lib/types";
 
 type Formulario = {
@@ -82,7 +84,6 @@ function ProdutosPageInterno() {
   const [categoriasAberto, setCategoriasAberto] = useState(false);
   const [fazendoUpload, setFazendoUpload] = useState(false);
   const [excluindoProduto, setExcluindoProduto] = useState<Produto | null>(null);
-  const [recuperando, setRecuperando] = useState(false);
   const [salvandoProduto, setSalvandoProduto] = useState(false);
 
   const ultimaCompra = useMemo(() => {
@@ -94,23 +95,6 @@ function ProdutosPageInterno() {
       .sort((a, b) => b.criadoEm.localeCompare(a.criadoEm));
     return compras[0] || null;
   }, [editando?.id, movimentos]);
-
-  async function recuperarIniciais() {
-    if (!confirm("Isso vai adicionar as 35 bebidas da versão de demonstração. Continuar?")) return;
-    setRecuperando(true);
-    try {
-      const iniciais = semearProdutos();
-      for (const p of iniciais) {
-        await salvarProduto(p);
-      }
-      alert("Produtos recuperados com sucesso!");
-    } catch (e) {
-      console.error(e);
-      alert("Erro ao recuperar produtos.");
-    } finally {
-      setRecuperando(false);
-    }
-  }
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -260,33 +244,23 @@ function ProdutosPageInterno() {
             : `${produtos.length} ${produtos.length === 1 ? "produto" : "produtos"} no catálogo`
         }
         acao={
-          <div className="flex gap-2">
-            <button
-              className="btn-secundario"
-              onClick={recuperarIniciais}
-              disabled={recuperando}
-              title="Recuperar 35 produtos iniciais (demonstração)"
-            >
-              {recuperando ? (
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-acento border-t-transparent" />
-              ) : (
-                <Boxes className="h-4 w-4" />
-              )}
-              <span className="hidden sm:inline">Recuperar</span>
-            </button>
+          // Botões com nome também no celular: só com ícone o Luifer apertou
+          // o "Recuperar produtos da demonstração" achando que era enviar o
+          // catálogo, e ele regravou 35 produtos com estoque zerado.
+          <div className="flex flex-wrap gap-2">
             <button
               className="btn-secundario"
               onClick={() => setImportAberto(true)}
             >
-              <Download className="h-4 w-4" />
-              <span className="hidden sm:inline">Importar</span>
+              <FileUp className="h-4 w-4" />
+              Importar
             </button>
             <button
               className="btn-secundario"
               onClick={() => setCategoriasAberto(true)}
             >
-              <Boxes className="h-4 w-4" />
-              <span className="hidden sm:inline">Categorias</span>
+              <Tags className="h-4 w-4" />
+              Categorias
             </button>
             <button className="btn-primario" onClick={abrirNovo}>
               <Plus className="h-4 w-4" />
@@ -297,6 +271,8 @@ function ProdutosPageInterno() {
       />
 
       <div className="px-4 md:px-6">
+        <CompartilharTabelas />
+
         <div className="relative mb-4">
           <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-texto-suave" />
           <input
@@ -815,6 +791,9 @@ function ModalImportar({
         (p) => normalizar(p.nome) === normalizar(linha.nome),
       );
       await salvarProduto({
+        // Produto que já existe mantém o que a lista não traz (foto, Tabela
+        // 2/3...) — antes o import regravava o produto e apagava esses campos.
+        ...jaExiste,
         id: jaExiste?.id ?? novoId(),
         nome: linha.nome,
         categoria: jaExiste?.categoria ?? categoria,
