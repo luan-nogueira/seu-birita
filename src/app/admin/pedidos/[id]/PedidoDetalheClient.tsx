@@ -32,6 +32,7 @@ import {
   efeitoEstoque,
   entregueUn,
   margemLucro,
+  paraUnidades,
   pedidoContabilizado,
   sobraUn,
   novoItem,
@@ -120,6 +121,8 @@ function PedidoPageInterno() {
   const [salvando, setSalvando] = useState(false);
   const [modalExcluirAberto, setModalExcluirAberto] = useState(false);
   const [excluindoItem, setExcluindoItem] = useState<{ indice: number; nome: string } | null>(null);
+  // Número da entrega (remessa) esperando confirmação pra ser apagada.
+  const [excluindoRemessa, setExcluindoRemessa] = useState<number | null>(null);
   const semeado = useRef(false);
 
   // Última "foto" do que este pedido já tirou do estoque — a baseline pra
@@ -267,6 +270,46 @@ function PedidoPageInterno() {
     });
   }
 
+  // A entrega é do pedido inteiro (Nova remessa cria em todos os itens),
+  // então apagar também tira de todos e renumera as seguintes.
+  function removerRemessa(numero: number) {
+    setPedido((p) => {
+      if (!p) return p;
+      return {
+        ...p,
+        itens: p.itens.map((i) => {
+          const entregas = i.entregas
+            .filter((e) => e.numero !== numero)
+            .map((e) => (e.numero > numero ? { ...e, numero: e.numero - 1 } : e));
+          // Todo item precisa de pelo menos uma entrega pra ter onde digitar.
+          return {
+            ...i,
+            entregas: entregas.length > 0 ? entregas : [{ numero: 1, cx: 0, un: 0 }],
+          };
+        }),
+      };
+    });
+  }
+
+  /** Unidades lançadas nesta entrega, somando todos os itens. */
+  function unidadesDaRemessa(numero: number): number {
+    if (!pedido) return 0;
+    return pedido.itens.reduce(
+      (soma, i) =>
+        soma +
+        i.entregas
+          .filter((e) => e.numero === numero)
+          .reduce((s, e) => s + paraUnidades(e.cx, e.un, i.unPorCaixa), 0),
+      0,
+    );
+  }
+
+  // Entrega vazia (criada sem querer) sai direto; com quantidade, confirma.
+  function pedirRemocaoRemessa(numero: number) {
+    if (unidadesDaRemessa(numero) > 0) setExcluindoRemessa(numero);
+    else removerRemessa(numero);
+  }
+
   function solicitarExclusaoPedido() {
     setModalExcluirAberto(true);
   }
@@ -409,6 +452,7 @@ function PedidoPageInterno() {
                           consignacao={consignacao}
                           aoMudar={(m) => atualizarItem(indice, m)}
                           aoRemover={() => pedirRemocaoItem(indice)}
+                          aoRemoverRemessa={pedirRemocaoRemessa}
                         />
                       ))}
                     </ul>
@@ -424,6 +468,7 @@ function PedidoPageInterno() {
                   consignacao={consignacao}
                   aoMudarItem={atualizarItem}
                   aoRemoverItem={pedirRemocaoItem}
+                  aoRemoverRemessa={pedirRemocaoRemessa}
                 />
               </div>
             </>
@@ -503,6 +548,34 @@ function PedidoPageInterno() {
       >
         <p className="text-sm text-texto-suave">
           Tem certeza que deseja remover o produto <strong>{excluindoItem?.nome}</strong> do pedido?
+        </p>
+      </Modal>
+
+      <Modal
+        aberto={excluindoRemessa !== null}
+        aoFechar={() => setExcluindoRemessa(null)}
+        titulo="Apagar entrega"
+        rodape={
+          <>
+            <button className="btn-secundario" onClick={() => setExcluindoRemessa(null)}>
+              Cancelar
+            </button>
+            <button
+              className="btn-perigo"
+              onClick={() => {
+                if (excluindoRemessa !== null) removerRemessa(excluindoRemessa);
+                setExcluindoRemessa(null);
+              }}
+            >
+              Apagar entrega
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-texto-suave">
+          Apagar a <strong>Entrega {excluindoRemessa}</strong> do pedido inteiro? Ela tem{" "}
+          <strong>{num(excluindoRemessa !== null ? unidadesDaRemessa(excluindoRemessa) : 0)} un</strong>{" "}
+          lançadas.
         </p>
       </Modal>
     </>
@@ -827,11 +900,14 @@ function CartaoItem({
   consignacao,
   aoMudar,
   aoRemover,
+  aoRemoverRemessa,
 }: {
   item: PedidoItem;
   consignacao: boolean;
   aoMudar: (m: Partial<PedidoItem>) => void;
   aoRemover: () => void;
+  /** Apaga a entrega (pelo número) do pedido inteiro. */
+  aoRemoverRemessa: (numero: number) => void;
 }) {
   const tipo = consignacao ? "CONSIGNACAO" : "VENDA_DIRETA";
   const entregue = entregueUn(item);
@@ -910,6 +986,14 @@ function CartaoItem({
                   }
                   aria-label={`Data da entrega ${e.numero} de ${item.nome}`}
                 />
+                <button
+                  type="button"
+                  onClick={() => aoRemoverRemessa(e.numero)}
+                  className="ml-auto grid h-7 w-7 shrink-0 place-items-center rounded-lg text-texto-suave transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                  aria-label={`Apagar entrega ${e.numero}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
               </div>
             )}
           </div>
@@ -1059,12 +1143,14 @@ function TabelaItens({
   consignacao,
   aoMudarItem,
   aoRemoverItem,
+  aoRemoverRemessa,
 }: {
   categorias: [string, { item: PedidoItem; indice: number }[]][];
   remessas: number;
   consignacao: boolean;
   aoMudarItem: (i: number, m: Partial<PedidoItem>) => void;
   aoRemoverItem: (i: number) => void;
+  aoRemoverRemessa: (numero: number) => void;
 }) {
   const tipo = consignacao ? "CONSIGNACAO" : "VENDA_DIRETA";
   const colunasRemessa = Array.from({ length: remessas }, (_, i) => i);
@@ -1095,7 +1181,21 @@ function TabelaItens({
                 colSpan={3}
                 className="border-l border-borda px-3 py-2 text-center font-bold"
               >
-                {remessas > 1 ? `Entrega ${i + 1}` : "Entrega"}
+                {remessas > 1 ? (
+                  <span className="inline-flex items-center gap-1">
+                    Entrega {i + 1}
+                    <button
+                      type="button"
+                      onClick={() => aoRemoverRemessa(i + 1)}
+                      className="grid h-6 w-6 place-items-center rounded-lg text-texto-suave transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                      aria-label={`Apagar entrega ${i + 1}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                ) : (
+                  "Entrega"
+                )}
               </th>
             ))}
             {consignacao && (
