@@ -11,6 +11,8 @@ export type PedidoTipo = "CONSIGNACAO" | "VENDA_DIRETA";
 
 export type PedidoStatus =
   | "RASCUNHO"
+  /** Pedido guardado de lado: não conta em nada (nem dívida do cliente). */
+  | "ESTOCADO"
   | "ENTREGUE"
   | "ACERTO"
   | "FINALIZADO"

@@ -34,6 +34,7 @@ import {
   margemLucro,
   paraUnidades,
   pedidoContabilizado,
+  pedidoForaDasContas,
   sobraUn,
   novoItem,
   precoDaTabela,
@@ -66,6 +67,7 @@ import type {
 // conta no Financeiro, no painel e baixa o estoque (pedidoContabilizado).
 const STATUS_DISPONIVEIS: PedidoStatus[] = [
   "RASCUNHO",
+  "ESTOCADO",
   "ENTREGUE",
   "ACERTO",
   "FINALIZADO",
@@ -74,6 +76,7 @@ const STATUS_DISPONIVEIS: PedidoStatus[] = [
 
 const ROTULO_STATUS: Record<PedidoStatus, string> = {
   RASCUNHO: "Rascunho",
+  ESTOCADO: "Estocado",
   ENTREGUE: "Entregue",
   ACERTO: "Aguardando acerto",
   FINALIZADO: "Finalizado",
@@ -1452,7 +1455,7 @@ function ImportarDevolucao({
             p.id !== pedido.id &&
             p.clienteId === pedido.clienteId &&
             p.tipo === "CONSIGNACAO" &&
-            p.status !== "CANCELADO" &&
+            !pedidoForaDasContas(p) &&
             p.status !== "RASCUNHO" &&
             temDevolucao(p),
         )

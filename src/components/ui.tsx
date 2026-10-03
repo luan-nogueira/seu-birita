@@ -156,6 +156,7 @@ export function Modal({
 
 const CORES_STATUS: Record<PedidoStatus, string> = {
   RASCUNHO: "bg-superficie-2 text-texto-suave",
+  ESTOCADO: "bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300",
   ENTREGUE: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
   ACERTO: "bg-ouro-100 text-ouro-900 dark:bg-ouro-900/40 dark:text-ouro-200",
   FINALIZADO:
@@ -165,6 +166,7 @@ const CORES_STATUS: Record<PedidoStatus, string> = {
 
 const ROTULOS_STATUS: Record<PedidoStatus, string> = {
   RASCUNHO: "Rascunho",
+  ESTOCADO: "Estocado",
   ENTREGUE: "Entregue",
   ACERTO: "Aguardando acerto",
   FINALIZADO: "Finalizado",

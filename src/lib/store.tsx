@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { colecao, modoDemonstracao, novoId } from "./db";
-import { calcularTotais, comodatoPorCategoria, type EhComodato } from "./calc";
+import { calcularTotais, comodatoPorCategoria, pedidoForaDasContas, type EhComodato } from "./calc";
 import { useAuth } from "./auth";
 import type {
   Cliente,
@@ -247,7 +247,7 @@ export function DadosProvider({ children }: { children: React.ReactNode }) {
             (p) =>
               p.clienteId === clienteId &&
               p.id !== ignorarPedidoId &&
-              p.status !== "CANCELADO",
+              !pedidoForaDasContas(p),
           )
           .reduce((soma, p) => soma + calcularTotais(p, ehComodato).saldoAberto, 0),
     };

@@ -194,6 +194,16 @@ export function pedidoContabilizado(pedido: Pick<Pedido, "status">): boolean {
   return pedido.status === "ACERTO" || pedido.status === "FINALIZADO";
 }
 
+/**
+ * Cancelado e Estocado não entram nem na dívida do cliente nem no "falta R$"
+ * — o Rascunho entra (pode ter pendência lançada nele). Estocado é o pedido
+ * que o Luifer quer deixar guardado numa aba própria sem mexer em número
+ * nenhum; só continua aparecendo na Agenda.
+ */
+export function pedidoForaDasContas(pedido: Pick<Pedido, "status">): boolean {
+  return pedido.status === "CANCELADO" || pedido.status === "ESTOCADO";
+}
+
 /** Soma o lucro (calcularTotais) de uma lista de pedidos — lucro cheio, mesmo sem ter recebido ainda. */
 export function lucroTotal(pedidos: Pedido[], ehComodato: EhComodato): number {
   return pedidos.reduce((soma, p) => soma + calcularTotais(p, ehComodato).lucro, 0);

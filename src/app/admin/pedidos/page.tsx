@@ -9,13 +9,14 @@ import { Protegido } from "@/components/Protegido";
 import { useDados, novoId } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { rotaPedido } from "@/lib/rotas";
-import { calcularTotais } from "@/lib/calc";
+import { calcularTotais, pedidoForaDasContas } from "@/lib/calc";
 import { brl, dataBR, hojeISO, normalizar } from "@/lib/format";
 import type { Pedido, PedidoStatus, PedidoTipo } from "@/lib/types";
 
 const FILTROS: { valor: PedidoStatus | "TODOS"; rotulo: string }[] = [
   { valor: "TODOS", rotulo: "Todos" },
   { valor: "RASCUNHO", rotulo: "Rascunhos" },
+  { valor: "ESTOCADO", rotulo: "Estocados" },
   { valor: "ENTREGUE", rotulo: "Entregues" },
   { valor: "ACERTO", rotulo: "Aguardando acerto" },
   { valor: "FINALIZADO", rotulo: "Finalizados" },
@@ -166,7 +167,7 @@ function ConteudoPedidos() {
 function CartaoPedido({ pedido }: { pedido: Pedido }) {
   const { ehComodato } = useDados();
   const t = calcularTotais(pedido, ehComodato);
-  const emAberto = t.saldoAberto > 0.005 && pedido.status !== "CANCELADO";
+  const emAberto = t.saldoAberto > 0.005 && !pedidoForaDasContas(pedido);
 
   return (
     <li>

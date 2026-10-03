@@ -58,7 +58,9 @@ export default function InicioPage() {
   const pedidosDoMes = contabilizados.filter(noPeriodo);
   // A contagem de eventos segue incluindo os Entregues — o evento aconteceu,
   // só o dinheiro é que ainda não entra na conta.
-  const eventosDoMes = ativos.filter((p) => p.status !== "RASCUNHO" && noPeriodo(p));
+  const eventosDoMes = ativos.filter(
+    (p) => p.status !== "RASCUNHO" && p.status !== "ESTOCADO" && noPeriodo(p),
+  );
   const faturadoMes = pedidosDoMes.reduce(
     (soma, p) => soma + calcularTotais(p, ehComodato).valorFinal,
     0,
