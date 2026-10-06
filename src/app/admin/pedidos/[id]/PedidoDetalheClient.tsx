@@ -13,6 +13,7 @@ import {
   FileText,
   History,
   Layers,
+  Pencil,
   Plus,
   Search,
   Share2,
@@ -126,6 +127,7 @@ function PedidoPageInterno() {
   const [excluindoItem, setExcluindoItem] = useState<{ indice: number; nome: string } | null>(null);
   // Número da entrega (remessa) esperando confirmação pra ser apagada.
   const [excluindoRemessa, setExcluindoRemessa] = useState<number | null>(null);
+  const [editandoEvento, setEditandoEvento] = useState(false);
   const semeado = useRef(false);
 
   // Última "foto" do que este pedido já tirou do estoque — a baseline pra
@@ -351,16 +353,24 @@ function PedidoPageInterno() {
             <ArrowLeft className="h-5 w-5" />
           </Link>
 
-          <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={() => setEditandoEvento(true)}
+            className="-my-1 min-w-0 flex-1 rounded-lg px-1.5 py-1 text-left transition hover:bg-superficie-2"
+            aria-label="Editar data e nome do evento"
+          >
             <p className="truncate font-bold leading-tight">
               {pedido.clienteNome}
             </p>
-            <p className="truncate text-xs text-texto-suave">
-              #{String(pedido.numero).padStart(3, "0")} ·{" "}
-              {dataBR(pedido.dataEvento)}
-              {pedido.titulo && ` · ${pedido.titulo}`}
+            <p className="flex items-center gap-1 text-xs text-texto-suave">
+              <span className="truncate">
+                #{String(pedido.numero).padStart(3, "0")} ·{" "}
+                {dataBR(pedido.dataEvento)}
+                {pedido.titulo && ` · ${pedido.titulo}`}
+              </span>
+              <Pencil className="h-3 w-3 shrink-0" />
             </p>
-          </div>
+          </button>
 
           <IndicadorSalvamento salvando={salvando} />
 
@@ -581,7 +591,90 @@ function PedidoPageInterno() {
           lançadas.
         </p>
       </Modal>
+
+      <EditarEvento
+        aberto={editandoEvento}
+        pedido={pedido}
+        aoFechar={() => setEditandoEvento(false)}
+        aoSalvar={atualizar}
+      />
     </>
+  );
+}
+
+function EditarEvento({
+  aberto,
+  pedido,
+  aoFechar,
+  aoSalvar,
+}: {
+  aberto: boolean;
+  pedido: Pedido;
+  aoFechar: () => void;
+  aoSalvar: (m: Partial<Pedido>) => void;
+}) {
+  const [dataEvento, setDataEvento] = useState(pedido.dataEvento);
+  const [titulo, setTitulo] = useState(pedido.titulo ?? "");
+
+  // Recomeça do que está no pedido a cada abertura — fechar sem salvar
+  // descarta o que foi digitado.
+  useEffect(() => {
+    if (!aberto) return;
+    setDataEvento(pedido.dataEvento);
+    setTitulo(pedido.titulo ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aberto]);
+
+  function salvar() {
+    if (!dataEvento) return;
+    aoSalvar({ dataEvento, titulo: titulo.trim() || undefined });
+    aoFechar();
+  }
+
+  return (
+    <Modal
+      aberto={aberto}
+      aoFechar={aoFechar}
+      titulo="Editar evento"
+      rodape={
+        <>
+          <button className="btn-secundario" onClick={aoFechar}>
+            Cancelar
+          </button>
+          <button className="btn-primario" onClick={salvar} disabled={!dataEvento}>
+            Salvar
+          </button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="rotulo" htmlFor="ee-data">
+            Data do evento
+          </label>
+          <input
+            id="ee-data"
+            type="date"
+            className="campo"
+            value={dataEvento}
+            onChange={(e) => setDataEvento(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="rotulo" htmlFor="ee-titulo">
+            Evento (opcional)
+          </label>
+          <input
+            id="ee-titulo"
+            className="campo"
+            placeholder="Réveillon"
+            value={titulo}
+            onChange={(e) => setTitulo(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && salvar()}
+          />
+        </div>
+      </div>
+    </Modal>
   );
 }
 
