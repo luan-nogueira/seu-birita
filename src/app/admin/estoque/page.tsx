@@ -399,7 +399,6 @@ function EstoquePageInterno() {
 
   const [busca, setBusca] = useState("");
   const [soSemCusto, setSoSemCusto] = useState(false);
-  const [soNegativos, setSoNegativos] = useState(false);
   const [produtoHistorico, setProdutoHistorico] = useState<Produto | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -517,27 +516,24 @@ function EstoquePageInterno() {
     return produtosOrdenados.filter(
       (p) =>
         (!soSemCusto || semCustoNoEstoque(p)) &&
-        (!soNegativos || estoqueNegativo(p)) &&
         (!termo || normalizar(p.nome).includes(termo) || normalizar(p.categoria).includes(termo)),
     );
-  }, [produtosOrdenados, busca, soSemCusto, soNegativos]);
+  }, [produtosOrdenados, busca, soSemCusto]);
 
   // Valor do que está parado no galpão. Estoque negativo não conta (é erro
   // de lançamento, não mercadoria) e produto sem custo cadastrado entra como
-  // zero no custo — por isso os avisos com a contagem de cada um.
+  // zero no custo — por isso o aviso com a contagem deles.
   const valorEstoque = useMemo(() => {
     let custo = 0;
     let venda = 0;
     let semCusto = 0;
-    let negativos = 0;
     for (const p of produtosOrdenados) {
-      if (estoqueNegativo(p)) negativos++;
       if (p.estoqueUn <= 0) continue;
       custo += p.estoqueUn * (p.precoCusto || 0);
       venda += p.estoqueUn * (p.precoUn || 0);
       if (semCustoNoEstoque(p)) semCusto++;
     }
-    return { custo, venda, semCusto, negativos };
+    return { custo, venda, semCusto };
   }, [produtosOrdenados]);
 
   const agrupados = useMemo(() => {
@@ -781,10 +777,7 @@ function EstoquePageInterno() {
               {valorEstoque.semCusto > 0 && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setSoNegativos(false);
-                    setSoSemCusto(true);
-                  }}
+                  onClick={() => setSoSemCusto(true)}
                   className="mt-0.5 text-left text-xs font-semibold text-acento underline underline-offset-2"
                 >
                   {valorEstoque.semCusto} produto(s) sem custo cadastrado — ver quais
@@ -801,49 +794,6 @@ function EstoquePageInterno() {
             </p>
           </div>
         </div>
-
-        {valorEstoque.negativos > 0 && !soNegativos && (
-          <button
-            type="button"
-            onClick={() => {
-              setSoSemCusto(false);
-              setSoNegativos(true);
-            }}
-            className="-mt-2 mb-4 flex items-center gap-1.5 text-left text-xs font-semibold text-red-600 underline underline-offset-2 dark:text-red-400"
-          >
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-            {valorEstoque.negativos} produto(s) com estoque negativo, fora da conta — ver quais
-          </button>
-        )}
-
-        {soNegativos && (
-          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm dark:border-red-900/50 dark:bg-red-950/30">
-            <span className="min-w-0 flex-1">
-              <span className="block font-semibold">Só os produtos com estoque negativo</span>
-              <span className="block text-xs text-texto-suave">
-                Não entram no valor do estoque. Conte no galpão e lance um Ajuste
-                com o que tem de verdade.
-              </span>
-            </span>
-            <button
-              type="button"
-              className="btn-primario shrink-0 text-xs"
-              onClick={() => {
-                setTipoMovimento("AJUSTE");
-                setModalAberto(true);
-              }}
-            >
-              Lançar ajuste
-            </button>
-            <button
-              type="button"
-              className="btn-secundario shrink-0 text-xs"
-              onClick={() => setSoNegativos(false)}
-            >
-              Mostrar todos
-            </button>
-          </div>
-        )}
 
         {soSemCusto && (
           <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-ouro-300 bg-ouro-50 px-4 py-3 text-sm dark:bg-ouro-900/20">
@@ -886,9 +836,7 @@ function EstoquePageInterno() {
             <p className="font-bold">
               {soSemCusto
                 ? "Todos os produtos em estoque já têm custo"
-                : soNegativos
-                  ? "Nenhum produto com estoque negativo"
-                  : "Nenhum produto encontrado"}
+                : "Nenhum produto encontrado"}
             </p>
           </div>
         ) : (
