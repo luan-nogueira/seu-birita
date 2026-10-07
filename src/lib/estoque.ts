@@ -119,6 +119,23 @@ export function efeitoLancado(
   return mapa;
 }
 
+/**
+ * Lançamentos de um pedido sem nenhum: o Estocado não tirou nada (até ele
+ * passar a baixar estoque, não lançava); o resto é pedido anterior ao
+ * controle de estoque e cai no cálculo pela regra (null).
+ */
+function lancadoOuVazio(movimentos: EstoqueMovimento[], pedido: Pedido) {
+  return (
+    efeitoLancado(movimentos, pedido.id) ??
+    (pedido.status === "ESTOCADO" ? new Map<string, number>() : null)
+  );
+}
+
+/** Baseline do que o pedido já tirou do estoque (ver efeitoLancado). */
+export function efeitoAplicado(movimentos: EstoqueMovimento[], pedido: Pedido) {
+  return lancadoOuVazio(movimentos, pedido) ?? efeitoEstoque(pedido);
+}
+
 export interface PedidoDesatualizado {
   pedido: Pedido;
   /** Por produto: quanto falta tirar do estoque (negativo = devolver). */
@@ -128,8 +145,8 @@ export interface PedidoDesatualizado {
 /**
  * Pedidos cujo lançamento no estoque não bate com a regra atual. O pedido
  * só reaplica a regra quando é editado — quando a regra mudou (Entregue
- * deixou de baixar estoque), os que já estavam Entregue continuaram com a
- * mercadoria fora do estoque até alguém mexer neles. Pedido sem nenhum
+ * deixou de baixar estoque, Estocado passou a baixar), os que já estavam
+ * assim continuaram como antes até alguém mexer neles. Pedido sem nenhum
  * lançamento (anterior ao controle de estoque) fica de fora.
  */
 export function pedidosDesatualizados(
@@ -138,7 +155,7 @@ export function pedidosDesatualizados(
 ): PedidoDesatualizado[] {
   const lista: PedidoDesatualizado[] = [];
   for (const pedido of pedidos) {
-    const lancado = efeitoLancado(movimentos, pedido.id);
+    const lancado = lancadoOuVazio(movimentos, pedido);
     if (!lancado) continue;
     const esperado = efeitoEstoque(pedido);
     const deltas = new Map<string, number>();

@@ -195,10 +195,18 @@ export function pedidoContabilizado(pedido: Pick<Pedido, "status">): boolean {
 }
 
 /**
+ * Quem tira do estoque: os contabilizados e o Estocado — a mercadoria do
+ * Estocado já saiu do galpão, mas ele não é venda e fica fora do Financeiro.
+ */
+export function pedidoBaixaEstoque(pedido: Pick<Pedido, "status">): boolean {
+  return pedidoContabilizado(pedido) || pedido.status === "ESTOCADO";
+}
+
+/**
  * Cancelado e Estocado não entram nem na dívida do cliente nem no "falta R$"
  * — o Rascunho entra (pode ter pendência lançada nele). Estocado é o pedido
- * que o Luifer quer deixar guardado numa aba própria sem mexer em número
- * nenhum; só continua aparecendo na Agenda.
+ * que o Luifer quer deixar guardado numa aba própria sem mexer no dinheiro;
+ * só baixa o estoque e continua aparecendo na Agenda.
  */
 export function pedidoForaDasContas(pedido: Pick<Pedido, "status">): boolean {
   return pedido.status === "CANCELADO" || pedido.status === "ESTOCADO";
@@ -228,12 +236,13 @@ export function lucroRecebidoTotal(pedidos: Pedido[], ehComodato: EhComodato): n
 /**
  * Quanto de cada produto está fora do galpão por causa deste pedido —
  * usado pra saber quanto debitar/creditar do estoque automaticamente.
- * Só baixa a partir de Aguardando acerto (ver pedidoContabilizado) — voltar
- * o pedido pra Entregue/Rascunho devolve tudo pro estoque.
+ * Só baixa em Estocado e a partir de Aguardando acerto (ver
+ * pedidoBaixaEstoque) — voltar o pedido pra Entregue/Rascunho devolve tudo
+ * pro estoque.
  */
 export function efeitoEstoque(pedido: Pedido): Map<string, number> {
   const mapa = new Map<string, number>();
-  if (!pedidoContabilizado(pedido)) return mapa;
+  if (!pedidoBaixaEstoque(pedido)) return mapa;
   for (const item of pedido.itens) {
     mapa.set(item.produtoId, saldoUn(item, pedido.tipo));
   }

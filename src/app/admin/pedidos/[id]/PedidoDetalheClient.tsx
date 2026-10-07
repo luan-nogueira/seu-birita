@@ -25,7 +25,7 @@ import { CampoQtd } from "@/components/CampoQtd";
 import { Protegido } from "@/components/Protegido";
 import { useAuth } from "@/lib/auth";
 import { useDados, novoId } from "@/lib/store";
-import { aplicarAjusteEstoque, efeitoLancado, reverterEstoquePedido } from "@/lib/estoque";
+import { aplicarAjusteEstoque, efeitoAplicado, reverterEstoquePedido } from "@/lib/estoque";
 import {
   calcularTotais,
   compararCategorias,
@@ -66,6 +66,7 @@ import type {
 // falta só fechar a conta com o cliente. Também entra sozinho quando um
 // rascunho/entregue recebe pagamento parcial. É a partir dele que o pedido
 // conta no Financeiro, no painel e baixa o estoque (pedidoContabilizado).
+// O Estocado também baixa o estoque, mas fica fora do dinheiro.
 const STATUS_DISPONIVEIS: PedidoStatus[] = [
   "RASCUNHO",
   "ESTOCADO",
@@ -138,8 +139,7 @@ function PedidoPageInterno() {
     // Espera tudo carregar: a baseline de estoque vem dos movimentos.
     if (!semeado.current && remoto && !carregando) {
       setPedido(remoto);
-      ultimoEstoqueAplicado.current =
-        efeitoLancado(movimentos, remoto.id) ?? efeitoEstoque(remoto);
+      ultimoEstoqueAplicado.current = efeitoAplicado(movimentos, remoto);
       semeado.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

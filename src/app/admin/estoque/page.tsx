@@ -752,9 +752,9 @@ function EstoquePageInterno() {
               {desatualizados.length} pedido(s) com o estoque desatualizado
             </span>
             <span className="block text-xs text-texto-suave">
-              Pedido em Rascunho ou Entregue não tira mais do estoque (só a
-              partir de Aguardando acerto), mas os que já estavam assim
-              continuaram com a mercadoria fora.
+              A regra de baixa mudou (Estocado agora tira do estoque;
+              Rascunho e Entregue não tiram), mas os pedidos que já estavam
+              assim continuaram com o lançamento antigo.
             </span>
           </span>
           <button
