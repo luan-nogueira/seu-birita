@@ -52,6 +52,11 @@ export default function RelatorioPage() {
   const cliente = clientePorId(pedido.clienteId);
   const totais = calcularTotais(pedido, ehComodato);
   const consignacao = pedido.tipo === "CONSIGNACAO";
+  // Fechamento separa mercadoria de comodato, como o resumo do pedido — o
+  // total a pagar continua somando os dois.
+  const temComodato = totais.unidadesComodatoEntregues > 0;
+  const mercadoriaEntregue = totais.valorPedido - totais.valorPedidoComodato;
+  const mercadoriaConsumo = totais.valorFinal - totais.valorComodato;
 
   // Itens sem nenhuma movimentação só poluem o documento.
   const itens = pedido.itens.filter((i) => entregueUn(i) > 0);
@@ -352,21 +357,28 @@ export default function RelatorioPage() {
             {consignacao && (
               <Linha
                 rotulo="Mercadoria entregue"
-                valor={brl(totais.valorPedido)}
+                valor={brl(mercadoriaEntregue)}
                 suave
               />
             )}
             {consignacao && (
               <Linha
                 rotulo="Devolução"
-                valor={`− ${brl(totais.valorPedido - totais.valorFinal)}`}
+                valor={`− ${brl(mercadoriaEntregue - mercadoriaConsumo)}`}
                 suave
               />
             )}
             <Linha
-              rotulo={consignacao ? "Consumo do evento" : "Total vendido"}
-              valor={brl(totais.valorFinal)}
+              rotulo={
+                consignacao
+                  ? "Consumo do evento"
+                  : temComodato
+                    ? "Mercadoria vendida"
+                    : "Total vendido"
+              }
+              valor={brl(mercadoriaConsumo)}
             />
+            {temComodato && <Linha rotulo="Comodato" valor={brl(totais.valorComodato)} />}
             {totais.desconto > 0 && (
               <Linha rotulo="Desconto" valor={`− ${brl(totais.desconto)}`} />
             )}
