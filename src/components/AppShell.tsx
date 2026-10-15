@@ -8,6 +8,7 @@ import {
   Calendar,
   ClipboardList,
   Home,
+  LayoutGrid,
   LogOut,
   Package,
   ShieldCheck,
@@ -16,6 +17,7 @@ import {
   Truck,
   Users,
   Wallet,
+  type LucideIcon,
 } from "lucide-react";
 import { LogoMarca } from "./Logo";
 import { TemaBotao } from "./TemaBotao";
@@ -24,7 +26,7 @@ import { useDados } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import type { Permissoes } from "@/lib/types";
 
-/** Usado tanto na lateral do desktop quanto na barra do celular (com scroll horizontal). */
+/** Lateral do desktop (todos) e barra do celular (os fixos + "Mais"). */
 const ITENS = [
   { href: "/admin", rotulo: "Início", Icone: Home, chave: null },
   { href: "/admin/pedidos", rotulo: "Pedidos", Icone: ClipboardList, chave: "pedidos" },
@@ -39,6 +41,15 @@ const ITENS = [
 ] satisfies { href: string; rotulo: string; Icone: unknown; chave: keyof Permissoes | null }[];
 
 const ITEM_EQUIPE = { href: "/admin/equipe", rotulo: "Equipe", Icone: ShieldCheck };
+
+/**
+ * Barra do celular: cabem 5 botões sem rolar. Estes ficam sempre à mostra
+ * e o resto vai pra folha do "Mais" — antes a barra rolava de lado e as
+ * telas do fim (Financeiro, Estoque…) ficavam escondidas.
+ */
+const FIXOS_CELULAR = ["/admin", "/admin/pedidos", "/admin/agenda", "/admin/financeiro"];
+
+const ROTA_ONLINE = "/admin/pedidos/clientes";
 
 /** Telas que qualquer um alcança sem estar logado. */
 const ROTAS_PUBLICAS = ["/login", "/admin/pedido"];
@@ -69,6 +80,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const itensPermitidos = ITENS.filter((i) => !i.chave || permissoes[i.chave]);
   const itensDesktop = ehAdmin ? [...itensPermitidos, ITEM_EQUIPE] : itensPermitidos;
+
+  // Sem permissão pra algum fixo, o próximo item da lista entra no lugar.
+  const fixosCelular =
+    itensDesktop.length <= 5
+      ? itensDesktop
+      : [
+          ...itensDesktop.filter((i) => FIXOS_CELULAR.includes(i.href)),
+          ...itensDesktop.filter((i) => !FIXOS_CELULAR.includes(i.href)),
+        ].slice(0, 4);
+  const noMais = itensDesktop.filter((i) => !fixosCelular.includes(i));
+  const [maisAberto, setMaisAberto] = useState(false);
+
+  const badgeDe = (href: string) => (href === ROTA_ONLINE ? pedidosClientesNovos : 0);
 
   useEffect(() => {
     if (precisaEntrar && !publica) router.replace("/login");
@@ -119,10 +143,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <nav className="flex flex-col gap-1">
             {itensDesktop.map(({ href, rotulo, Icone }) => {
               const ativo = estaAtivo(href, caminho);
-              const badge =
-                href === "/pedidos/clientes" && pedidosClientesNovos > 0
-                  ? pedidosClientesNovos
-                  : 0;
+              const badge = badgeDe(href);
               return (
                 <Link
                   key={href}
@@ -175,36 +196,102 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Navegação inferior — só no celular. Rola de lado: são 10 itens, não cabem numa tela só. */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t border-borda bg-superficie pb-[env(safe-area-inset-bottom)] [-ms-overflow-style:none] [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden">
-        {itensDesktop.map(({ href, rotulo, Icone }) => {
-          const ativo = estaAtivo(href, caminho);
-          const badge =
-            href === "/pedidos/clientes" && pedidosClientesNovos > 0
-              ? pedidosClientesNovos
-              : 0;
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`relative flex w-[68px] shrink-0 flex-col items-center gap-1 py-2.5 text-[10px] font-semibold transition ${
-                ativo ? "text-acento" : "text-texto-suave"
-              }`}
-            >
-              <div className="relative">
-                <Icone className="h-5 w-5" strokeWidth={ativo ? 2.5 : 2} />
+      {/* Navegação inferior — só no celular: os fixos + "Mais" com o resto. */}
+      <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-borda bg-superficie pb-[env(safe-area-inset-bottom)] md:hidden">
+        {fixosCelular.map(({ href, rotulo, Icone }) => (
+          <BotaoBarra
+            key={href}
+            href={href}
+            rotulo={rotulo}
+            Icone={Icone}
+            ativo={estaAtivo(href, caminho)}
+            badge={badgeDe(href)}
+          />
+        ))}
+        {noMais.length > 0 && (
+          <BotaoBarra
+            rotulo="Mais"
+            Icone={LayoutGrid}
+            // Acende quando a tela aberta é uma das que estão no "Mais".
+            ativo={noMais.some((i) => estaAtivo(i.href, caminho))}
+            badge={noMais.reduce((s, i) => s + badgeDe(i.href), 0)}
+            aoClicar={() => setMaisAberto(true)}
+          />
+        )}
+      </nav>
+
+      <Modal aberto={maisAberto} aoFechar={() => setMaisAberto(false)} titulo="Mais">
+        <div className="grid grid-cols-3 gap-2">
+          {noMais.map(({ href, rotulo, Icone }) => {
+            const ativo = estaAtivo(href, caminho);
+            const badge = badgeDe(href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setMaisAberto(false)}
+                className={`relative flex flex-col items-center gap-2 rounded-2xl border px-2 py-4 text-center text-xs font-semibold transition ${
+                  ativo
+                    ? "border-acento bg-acento/10 text-acento"
+                    : "border-borda text-texto hover:bg-superficie-2"
+                }`}
+              >
+                <Icone className="h-6 w-6" strokeWidth={ativo ? 2.5 : 2} />
+                {rotulo}
                 {badge > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-acento px-0.5 text-[9px] font-black text-acento-texto">
+                  <span className="absolute top-2 right-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-acento px-1 text-[11px] font-black text-acento-texto">
                     {badge}
                   </span>
                 )}
-              </div>
-              {rotulo}
-            </Link>
-          );
-        })}
-      </nav>
+              </Link>
+            );
+          })}
+        </div>
+      </Modal>
     </div>
+  );
+}
+
+/** Botão da barra do celular — link pra uma tela ou o "Mais". */
+function BotaoBarra({
+  href,
+  aoClicar,
+  rotulo,
+  Icone,
+  ativo,
+  badge,
+}: {
+  href?: string;
+  aoClicar?: () => void;
+  rotulo: string;
+  Icone: LucideIcon;
+  ativo: boolean;
+  badge: number;
+}) {
+  const classe = `relative flex min-w-0 flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-semibold transition ${
+    ativo ? "text-acento" : "text-texto-suave"
+  }`;
+  const conteudo = (
+    <>
+      <div className="relative">
+        <Icone className="h-5 w-5" strokeWidth={ativo ? 2.5 : 2} />
+        {badge > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-acento px-0.5 text-[9px] font-black text-acento-texto">
+            {badge}
+          </span>
+        )}
+      </div>
+      {rotulo}
+    </>
+  );
+  return href ? (
+    <Link href={href} className={classe}>
+      {conteudo}
+    </Link>
+  ) : (
+    <button type="button" onClick={aoClicar} className={classe}>
+      {conteudo}
+    </button>
   );
 }
 
