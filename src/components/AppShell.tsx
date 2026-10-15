@@ -11,6 +11,7 @@ import {
   LogOut,
   Package,
   ShieldCheck,
+  ShoppingBag,
   ShoppingCart,
   Truck,
   Users,
@@ -32,6 +33,7 @@ const ITENS = [
   { href: "/admin/produtos", rotulo: "Produtos", Icone: Package, chave: "produtos" },
   { href: "/admin/clientes", rotulo: "Clientes", Icone: Users, chave: "clientes" },
   { href: "/admin/financeiro", rotulo: "Financeiro", Icone: Wallet, chave: "financeiro" },
+  { href: "/admin/compras", rotulo: "Compras", Icone: ShoppingBag, chave: "estoque" },
   { href: "/admin/estoque", rotulo: "Estoque", Icone: Boxes, chave: "estoque" },
   { href: "/admin/fornecedores", rotulo: "Fornecedores", Icone: Truck, chave: "fornecedores" },
 ] satisfies { href: string; rotulo: string; Icone: unknown; chave: keyof Permissoes | null }[];
@@ -173,7 +175,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Navegação inferior — só no celular. Rola de lado: são 9 itens, não cabem numa tela só. */}
+      {/* Navegação inferior — só no celular. Rola de lado: são 10 itens, não cabem numa tela só. */}
       <nav className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t border-borda bg-superficie pb-[env(safe-area-inset-bottom)] [-ms-overflow-style:none] [scrollbar-width:none] md:hidden [&::-webkit-scrollbar]:hidden">
         {itensDesktop.map(({ href, rotulo, Icone }) => {
           const ativo = estaAtivo(href, caminho);

@@ -120,6 +120,23 @@ export function efeitoLancado(
 }
 
 /**
+ * Lançamentos de pedidos que já foram excluídos antes da correção que
+ * passou a limpar o histórico junto — só sujeira visual, não afeta a
+ * quantidade em estoque (já foi corrigida na hora da exclusão).
+ */
+export function movimentosOrfaos(
+  movimentos: EstoqueMovimento[],
+  pedidoPorId: (id: string) => Pedido | undefined,
+): EstoqueMovimento[] {
+  return movimentos.filter(
+    (m) =>
+      m.referenciaId &&
+      (m.origem === "PEDIDO" || m.origem === "DEVOLUCAO") &&
+      !pedidoPorId(m.referenciaId),
+  );
+}
+
+/**
  * Lançamentos de um pedido sem nenhum: o Estocado não tirou nada (até ele
  * passar a baixar estoque, não lançava); o resto é pedido anterior ao
  * controle de estoque e cai no cálculo pela regra (null).
