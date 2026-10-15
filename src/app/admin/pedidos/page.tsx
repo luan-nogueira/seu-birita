@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useRef, useState } from "react";
+import { Suspense, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClipboardList, Plus, Search } from "lucide-react";
@@ -9,7 +9,13 @@ import { Protegido } from "@/components/Protegido";
 import { useDados, novoId } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { rotaPedido } from "@/lib/rotas";
-import { calcularTotais, pedidoForaDasContas } from "@/lib/calc";
+import {
+  calcularTotais,
+  pedidoContabilizado,
+  pedidoForaDasContas,
+  situacaoPagamento,
+  type TotaisPedido,
+} from "@/lib/calc";
 import { brl, dataBR, hojeISO, normalizar } from "@/lib/format";
 import type { Pedido, PedidoStatus, PedidoTipo } from "@/lib/types";
 
@@ -22,6 +28,22 @@ const FILTROS: { valor: PedidoStatus | "TODOS"; rotulo: string }[] = [
   { valor: "FINALIZADO", rotulo: "Finalizados" },
 ];
 
+type FiltroPagamento = "TODOS" | "FALTA" | "PARCIAL" | "PAGO";
+
+const FILTROS_PAGAMENTO: { valor: FiltroPagamento; rotulo: string }[] = [
+  { valor: "TODOS", rotulo: "Todos" },
+  { valor: "FALTA", rotulo: "Falta receber" },
+  { valor: "PARCIAL", rotulo: "Pagou parte" },
+  { valor: "PAGO", rotulo: "Pago" },
+];
+
+function bateFiltroPagamento(filtro: FiltroPagamento, pedido: Pedido, t: TotaisPedido) {
+  if (filtro === "TODOS") return true;
+  const situacao = situacaoPagamento(pedido, t);
+  if (filtro === "FALTA") return situacao === "NADA_PAGO" || situacao === "PARCIAL";
+  return situacao === filtro;
+}
+
 export default function PedidosPage() {
   return (
     <Protegido chave="pedidos">
@@ -33,27 +55,52 @@ export default function PedidosPage() {
 }
 
 function ConteudoPedidos() {
-  const { pedidos, clientes, carregando, clientePorId } = useDados();
+  const { pedidos, clientes, carregando, clientePorId, ehComodato } = useDados();
   const params = useSearchParams();
   const clienteFiltro = params.get("cliente");
 
   const [filtro, setFiltro] = useState<PedidoStatus | "TODOS">("TODOS");
+  const [filtroPagamento, setFiltroPagamento] = useState<FiltroPagamento>("TODOS");
   const [busca, setBusca] = useState("");
   const [novoAberto, setNovoAberto] = useState(false);
 
   const lista = useMemo(() => {
     const termo = normalizar(busca);
-    return pedidos.filter((p) => {
-      if (clienteFiltro && p.clienteId !== clienteFiltro) return false;
-      if (filtro !== "TODOS" && p.status !== filtro) return false;
-      if (!termo) return true;
-      return (
-        normalizar(p.clienteNome).includes(termo) ||
-        normalizar(p.titulo || "").includes(termo) ||
-        String(p.numero).includes(termo)
-      );
-    });
-  }, [pedidos, filtro, busca, clienteFiltro]);
+    return pedidos
+      .filter((p) => {
+        if (clienteFiltro && p.clienteId !== clienteFiltro) return false;
+        if (filtro !== "TODOS" && p.status !== filtro) return false;
+        if (!termo) return true;
+        return (
+          normalizar(p.clienteNome).includes(termo) ||
+          normalizar(p.titulo || "").includes(termo) ||
+          String(p.numero).includes(termo)
+        );
+      })
+      .map((pedido) => ({ pedido, totais: calcularTotais(pedido, ehComodato) }))
+      .filter(({ pedido, totais }) => bateFiltroPagamento(filtroPagamento, pedido, totais));
+  }, [pedidos, filtro, filtroPagamento, busca, clienteFiltro, ehComodato]);
+
+  // Soma do que está na lista (respeita cliente, busca e filtros) — mesma
+  // regra do chip "falta R$" de cada cartão.
+  const resumo = useMemo(() => {
+    let falta = 0;
+    let recebido = 0;
+    let total = 0;
+    let comSaldo = 0;
+    let semAcerto = 0;
+    for (const { pedido, totais } of lista) {
+      if (pedidoForaDasContas(pedido)) continue;
+      total += totais.totalReceber;
+      recebido += totais.valorPago;
+      if (totais.saldoAberto > 0.005) {
+        falta += totais.saldoAberto;
+        comSaldo += 1;
+        if (!pedidoContabilizado(pedido)) semAcerto += 1;
+      }
+    }
+    return { falta, recebido, total, comSaldo, semAcerto };
+  }, [lista]);
 
   const cliente = clienteFiltro ? clientePorId(clienteFiltro) : null;
 
@@ -105,21 +152,73 @@ function ConteudoPedidos() {
           />
         </div>
 
-        <div className="-mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
+        <div className="-mx-4 mb-2 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
           {FILTROS.map((f) => (
-            <button
+            <BotaoFiltro
               key={f.valor}
-              onClick={() => setFiltro(f.valor)}
-              className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold transition ${
-                filtro === f.valor
-                  ? "bg-acento text-acento-texto"
-                  : "border border-borda bg-superficie text-texto-suave hover:bg-superficie-2"
-              }`}
+              ativo={filtro === f.valor}
+              aoClicar={() => setFiltro(f.valor)}
             >
               {f.rotulo}
-            </button>
+            </BotaoFiltro>
           ))}
         </div>
+
+        <div className="-mx-4 mb-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
+          <span className="shrink-0 text-xs font-semibold text-texto-suave">
+            Pagamento:
+          </span>
+          {FILTROS_PAGAMENTO.map((f) => (
+            <BotaoFiltro
+              key={f.valor}
+              ativo={filtroPagamento === f.valor}
+              aoClicar={() => setFiltroPagamento(f.valor)}
+            >
+              {f.rotulo}
+            </BotaoFiltro>
+          ))}
+        </div>
+
+        {!carregando && resumo.total > 0.005 && (
+          <div className="card mb-4 border-acento/40 bg-acento/5 px-4 py-3">
+            <div className="flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold tracking-wide text-texto-suave uppercase">
+                  Falta receber
+                </p>
+                <p className="mt-1 text-2xl font-black text-acento tabular-nums">
+                  {brl(resumo.falta)}
+                </p>
+                <p className="mt-0.5 text-xs text-texto-suave">
+                  {resumo.comSaldo === 0
+                    ? "Nenhum pedido em aberto"
+                    : `${resumo.comSaldo} pedido${resumo.comSaldo === 1 ? "" : "s"} em aberto`}
+                </p>
+              </div>
+              <div className="shrink-0 space-y-0.5 text-right text-xs text-texto-suave">
+                <p>
+                  Recebido{" "}
+                  <span className="font-bold text-texto tabular-nums">
+                    {brl(resumo.recebido)}
+                  </span>
+                </p>
+                <p>
+                  Total{" "}
+                  <span className="font-bold text-texto tabular-nums">
+                    {brl(resumo.total)}
+                  </span>
+                </p>
+              </div>
+            </div>
+            {resumo.semAcerto > 0 && (
+              <p className="mt-2 text-[11px] text-texto-suave">
+                Inclui {resumo.semAcerto} pedido{resumo.semAcerto === 1 ? "" : "s"} que
+                ainda não {resumo.semAcerto === 1 ? "chegou" : "chegaram"} no acerto — o
+                valor ainda pode mudar.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {!carregando && lista.length === 0 && (
@@ -150,8 +249,8 @@ function ConteudoPedidos() {
       )}
 
       <ul className="space-y-2 px-4 md:px-6">
-        {lista.map((p) => (
-          <CartaoPedido key={p.id} pedido={p} />
+        {lista.map(({ pedido, totais }) => (
+          <CartaoPedido key={pedido.id} pedido={pedido} t={totais} />
         ))}
       </ul>
 
@@ -164,9 +263,30 @@ function ConteudoPedidos() {
   );
 }
 
-function CartaoPedido({ pedido }: { pedido: Pedido }) {
-  const { ehComodato } = useDados();
-  const t = calcularTotais(pedido, ehComodato);
+function BotaoFiltro({
+  ativo,
+  aoClicar,
+  children,
+}: {
+  ativo: boolean;
+  aoClicar: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      onClick={aoClicar}
+      className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-bold transition ${
+        ativo
+          ? "bg-acento text-acento-texto"
+          : "border border-borda bg-superficie text-texto-suave hover:bg-superficie-2"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function CartaoPedido({ pedido, t }: { pedido: Pedido; t: TotaisPedido }) {
   const emAberto = t.saldoAberto > 0.005 && !pedidoForaDasContas(pedido);
 
   return (

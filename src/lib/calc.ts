@@ -212,6 +212,21 @@ export function pedidoForaDasContas(pedido: Pick<Pedido, "status">): boolean {
   return pedido.status === "CANCELADO" || pedido.status === "ESTOCADO";
 }
 
+export type SituacaoPagamento = "NADA_PAGO" | "PARCIAL" | "PAGO";
+
+/**
+ * Pra filtrar a lista de pedidos pelo pagamento. null = pedido fora das
+ * contas (Cancelado/Estocado) ou ainda sem valor nenhum pra cobrar.
+ */
+export function situacaoPagamento(
+  pedido: Pick<Pedido, "status">,
+  t: TotaisPedido,
+): SituacaoPagamento | null {
+  if (pedidoForaDasContas(pedido) || t.totalReceber <= 0.005) return null;
+  if (t.saldoAberto <= 0.005) return "PAGO";
+  return t.valorPago > 0.005 ? "PARCIAL" : "NADA_PAGO";
+}
+
 /** Soma o lucro (calcularTotais) de uma lista de pedidos — lucro cheio, mesmo sem ter recebido ainda. */
 export function lucroTotal(pedidos: Pedido[], ehComodato: EhComodato): number {
   return pedidos.reduce((soma, p) => soma + calcularTotais(p, ehComodato).lucro, 0);
