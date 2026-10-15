@@ -62,6 +62,8 @@ function ConteudoPedidos() {
   const [filtro, setFiltro] = useState<PedidoStatus | "TODOS">("TODOS");
   const [filtroPagamento, setFiltroPagamento] = useState<FiltroPagamento>("TODOS");
   const [busca, setBusca] = useState("");
+  const [dataDe, setDataDe] = useState("");
+  const [dataAte, setDataAte] = useState("");
   const [novoAberto, setNovoAberto] = useState(false);
 
   const lista = useMemo(() => {
@@ -70,6 +72,8 @@ function ConteudoPedidos() {
       .filter((p) => {
         if (clienteFiltro && p.clienteId !== clienteFiltro) return false;
         if (filtro !== "TODOS" && p.status !== filtro) return false;
+        const dia = p.dataEvento.slice(0, 10);
+        if ((dataDe && dia < dataDe) || (dataAte && dia > dataAte)) return false;
         if (!termo) return true;
         return (
           normalizar(p.clienteNome).includes(termo) ||
@@ -79,7 +83,7 @@ function ConteudoPedidos() {
       })
       .map((pedido) => ({ pedido, totais: calcularTotais(pedido, ehComodato) }))
       .filter(({ pedido, totais }) => bateFiltroPagamento(filtroPagamento, pedido, totais));
-  }, [pedidos, filtro, filtroPagamento, busca, clienteFiltro, ehComodato]);
+  }, [pedidos, filtro, filtroPagamento, busca, dataDe, dataAte, clienteFiltro, ehComodato]);
 
   // Soma do que está na lista (respeita cliente, busca e filtros) — mesma
   // regra do chip "falta R$" de cada cartão.
@@ -151,6 +155,46 @@ function ConteudoPedidos() {
             onChange={(e) => setBusca(e.target.value)}
           />
         </div>
+
+        {/* Data do evento — vazio = sem limite (começa mostrando todos). */}
+        <div className="mb-3 grid grid-cols-2 gap-3">
+          <div className="min-w-0">
+            <label className="rotulo" htmlFor="pedidos-de">
+              De
+            </label>
+            <input
+              id="pedidos-de"
+              type="date"
+              className="campo w-full min-w-0"
+              value={dataDe}
+              onChange={(e) => setDataDe(e.target.value)}
+            />
+          </div>
+          <div className="min-w-0">
+            <label className="rotulo" htmlFor="pedidos-ate">
+              Até
+            </label>
+            <input
+              id="pedidos-ate"
+              type="date"
+              className="campo w-full min-w-0"
+              value={dataAte}
+              onChange={(e) => setDataAte(e.target.value)}
+            />
+          </div>
+        </div>
+        {(dataDe || dataAte) && (
+          <button
+            type="button"
+            className="-mt-1 mb-3 text-xs font-semibold text-acento underline-offset-4 hover:underline"
+            onClick={() => {
+              setDataDe("");
+              setDataAte("");
+            }}
+          >
+            Limpar datas (ver todas)
+          </button>
+        )}
 
         <div className="-mx-4 mb-2 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
           {FILTROS.map((f) => (
