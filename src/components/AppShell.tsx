@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  BarChart3,
   Boxes,
   Calendar,
   ClipboardList,
@@ -31,6 +32,7 @@ const ITENS = [
   { href: "/admin", rotulo: "Início", Icone: Home, chave: null },
   { href: "/admin/pedidos", rotulo: "Pedidos", Icone: ClipboardList, chave: "pedidos" },
   { href: "/admin/pedidos/clientes", rotulo: "Online", Icone: ShoppingCart, chave: "online" },
+  { href: "/admin/vendas", rotulo: "Vendas", Icone: BarChart3, chave: "pedidos" },
   { href: "/admin/agenda", rotulo: "Agenda", Icone: Calendar, chave: "agenda" },
   { href: "/admin/produtos", rotulo: "Produtos", Icone: Package, chave: "produtos" },
   { href: "/admin/clientes", rotulo: "Clientes", Icone: Users, chave: "clientes" },
