@@ -65,8 +65,8 @@ import type {
 // "Aguardando acerto" = a devolução do evento já foi conferida e lançada,
 // falta só fechar a conta com o cliente. Também entra sozinho quando um
 // rascunho/entregue recebe pagamento parcial. É a partir dele que o pedido
-// conta no Financeiro, no painel e baixa o estoque (pedidoContabilizado).
-// O Estocado também baixa o estoque, mas fica fora do dinheiro.
+// conta no Financeiro e no painel (pedidoContabilizado). O estoque já baixa
+// no Entregue e no Estocado, que ficam fora do dinheiro (pedidoBaixaEstoque).
 const STATUS_DISPONIVEIS: PedidoStatus[] = [
   "RASCUNHO",
   "ESTOCADO",

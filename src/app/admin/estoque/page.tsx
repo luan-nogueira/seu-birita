@@ -197,8 +197,8 @@ function EstoquePageInterno() {
               {desatualizados.length} pedido(s) com o estoque desatualizado
             </span>
             <span className="block text-xs text-texto-suave">
-              A regra de baixa mudou (Estocado agora tira do estoque;
-              Rascunho e Entregue não tiram), mas os pedidos que já estavam
+              A regra de baixa mudou (Entregue e Estocado agora tiram do
+              estoque; Rascunho não tira), mas os pedidos que já estavam
               assim continuaram com o lançamento antigo.
             </span>
           </span>

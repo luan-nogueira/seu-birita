@@ -136,15 +136,22 @@ export function movimentosOrfaos(
   );
 }
 
+/** Quando o controle de estoque começou — pedido sem lançamento antes disso é legado. */
+const INICIO_CONTROLE_ESTOQUE = "2026-09-15";
+
 /**
  * Lançamentos de um pedido sem nenhum: o Estocado não tirou nada (até ele
- * passar a baixar estoque, não lançava); o resto é pedido anterior ao
- * controle de estoque e cai no cálculo pela regra (null).
+ * passar a baixar estoque, não lançava), nem o Entregue criado já com o
+ * controle de estoque (de 01/10 até ele voltar a baixar, não lançava); o
+ * resto é pedido anterior ao controle de estoque e cai no cálculo pela
+ * regra (null).
  */
 function lancadoOuVazio(movimentos: EstoqueMovimento[], pedido: Pedido) {
+  const naoLancava =
+    pedido.status === "ESTOCADO" ||
+    (pedido.status === "ENTREGUE" && pedido.criadoEm >= INICIO_CONTROLE_ESTOQUE);
   return (
-    efeitoLancado(movimentos, pedido.id) ??
-    (pedido.status === "ESTOCADO" ? new Map<string, number>() : null)
+    efeitoLancado(movimentos, pedido.id) ?? (naoLancava ? new Map<string, number>() : null)
   );
 }
 
@@ -161,8 +168,8 @@ export interface PedidoDesatualizado {
 
 /**
  * Pedidos cujo lançamento no estoque não bate com a regra atual. O pedido
- * só reaplica a regra quando é editado — quando a regra mudou (Entregue
- * deixou de baixar estoque, Estocado passou a baixar), os que já estavam
+ * só reaplica a regra quando é editado — quando a regra mudou (Estocado
+ * e Entregue passaram a baixar estoque), os que já estavam
  * assim continuaram como antes até alguém mexer neles. Pedido sem nenhum
  * lançamento (anterior ao controle de estoque) fica de fora.
  */

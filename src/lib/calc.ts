@@ -187,19 +187,25 @@ export function margemLucro(t: TotaisPedido): number {
 
 /**
  * Só Aguardando acerto e Finalizado contam como venda de verdade — é aí que
- * o pedido entra no Financeiro, no painel inicial e baixa o estoque.
- * Rascunho e Entregue ainda podem mudar (devolução, itens), então ficam fora.
+ * o pedido entra no Financeiro e no painel inicial. Rascunho e Entregue ainda
+ * podem mudar (devolução, itens), então ficam fora (o Entregue já baixa o
+ * estoque — ver pedidoBaixaEstoque).
  */
 export function pedidoContabilizado(pedido: Pick<Pedido, "status">): boolean {
   return pedido.status === "ACERTO" || pedido.status === "FINALIZADO";
 }
 
 /**
- * Quem tira do estoque: os contabilizados e o Estocado — a mercadoria do
- * Estocado já saiu do galpão, mas ele não é venda e fica fora do Financeiro.
+ * Quem tira do estoque: os contabilizados, o Entregue e o Estocado — a
+ * mercadoria deles já saiu do galpão, mesmo sem ser venda fechada ainda
+ * (ficam fora do Financeiro). A devolução lançada depois volta pro estoque.
  */
 export function pedidoBaixaEstoque(pedido: Pick<Pedido, "status">): boolean {
-  return pedidoContabilizado(pedido) || pedido.status === "ESTOCADO";
+  return (
+    pedidoContabilizado(pedido) ||
+    pedido.status === "ENTREGUE" ||
+    pedido.status === "ESTOCADO"
+  );
 }
 
 /**
@@ -251,9 +257,8 @@ export function lucroRecebidoTotal(pedidos: Pedido[], ehComodato: EhComodato): n
 /**
  * Quanto de cada produto está fora do galpão por causa deste pedido —
  * usado pra saber quanto debitar/creditar do estoque automaticamente.
- * Só baixa em Estocado e a partir de Aguardando acerto (ver
- * pedidoBaixaEstoque) — voltar o pedido pra Entregue/Rascunho devolve tudo
- * pro estoque.
+ * Só baixa em Estocado e a partir de Entregue (ver pedidoBaixaEstoque) —
+ * voltar o pedido pra Rascunho devolve tudo pro estoque.
  */
 export function efeitoEstoque(pedido: Pedido): Map<string, number> {
   const mapa = new Map<string, number>();
