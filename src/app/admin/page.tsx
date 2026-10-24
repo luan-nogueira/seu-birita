@@ -5,6 +5,7 @@ import { useState, type ReactNode, type ComponentType } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
+  Armchair,
   ArrowRight,
   CalendarDays,
   ClipboardList,
@@ -65,12 +66,23 @@ export default function InicioPage() {
   // anterior não entra: é dívida de outro pedido, já faturada lá). O
   // comodato entra no faturado, mas aparece separado porque fica
   // fora do lucro.
-  let faturadoMes = 0;
-  let comodatoMes = 0;
-  for (const p of pedidosDoMes) {
+  const faturadoMes = pedidosDoMes.reduce((soma, p) => {
     const t = calcularTotais(p, ehComodato);
-    faturadoMes += t.valorFinal - t.desconto;
-    comodatoMes += t.valorComodato;
+    return soma + t.valorFinal - t.desconto;
+  }, 0);
+
+  // Comodato tem quadro próprio, com período separado do faturado — mesma
+  // regra de quais pedidos contam (Aguardando acerto e Finalizado).
+  const [comodatoDe, setComodatoDe] = useState(() => hojeISO().slice(0, 8) + "01");
+  const [comodatoAte, setComodatoAte] = useState(hojeISO);
+  let comodatoPeriodo = 0;
+  let comodatoUn = 0;
+  for (const p of contabilizados) {
+    const d = p.dataEvento.slice(0, 10);
+    if (d < comodatoDe || d > comodatoAte) continue;
+    const t = calcularTotais(p, ehComodato);
+    comodatoPeriodo += t.valorComodato;
+    comodatoUn += t.unidadesComodatoEntregues - t.unidadesComodatoDevolvidas;
   }
   // Lucro proporcional ao que já foi pago — um pedido com pagamento parcial
   // não deve mostrar o lucro do evento inteiro, só o que já entrou.
@@ -149,11 +161,6 @@ export default function InicioPage() {
                 valor={brl(faturadoMes)}
                 detalhe={
                   <div className="mt-1 flex flex-col gap-1">
-                    {comodatoMes > 0.005 && (
-                      <span>
-                        {brl(faturadoMes - comodatoMes)} mercadoria · {brl(comodatoMes)} comodato
-                      </span>
-                    )}
                     <input
                       type="date"
                       aria-label="Data inicial"
@@ -181,6 +188,30 @@ export default function InicioPage() {
                     : faturadoMes > 0
                       ? "tudo recebido"
                       : "sem faturamento"
+                }
+              />
+              <Cartao
+                Icone={Armchair}
+                rotulo="Comodato no período"
+                valor={brl(comodatoPeriodo)}
+                detalhe={
+                  <div className="mt-1 flex flex-col gap-1">
+                    <span>{comodatoUn} un cobradas</span>
+                    <input
+                      type="date"
+                      aria-label="Data inicial do comodato"
+                      value={comodatoDe}
+                      onChange={(e) => setComodatoDe(e.target.value)}
+                      className="campo h-auto min-h-0 px-1.5 py-1 text-[11px]"
+                    />
+                    <input
+                      type="date"
+                      aria-label="Data final do comodato"
+                      value={comodatoAte}
+                      onChange={(e) => setComodatoAte(e.target.value)}
+                      className="campo h-auto min-h-0 px-1.5 py-1 text-[11px]"
+                    />
+                  </div>
                 }
               />
             </>
