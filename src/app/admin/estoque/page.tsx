@@ -59,6 +59,7 @@ function EstoquePageInterno() {
     produtos,
     salvarMovimento,
     somarEstoque,
+    atualizarProduto,
     produtoPorId,
     pedidoPorId,
     pedidos,
@@ -125,6 +126,29 @@ function EstoquePageInterno() {
   const historico = useMemo(() => somaDoHistorico(movimentos, orfaos), [movimentos, orfaos]);
   const divergente = (p: Produto) => (historico.get(p.id) ?? 0) !== p.estoqueUn;
   const qtdDivergentes = produtosOrdenados.filter(divergente).length;
+  const [acertandoHistorico, setAcertandoHistorico] = useState(false);
+
+  // Nos furos que apareceram (gravação do estoque perdida, compra editada
+  // na versão antiga) o histórico é que estava certo: o lançamento gravou,
+  // o número do estoque não. Então dá pra acertar o estoque pelo histórico
+  // sem contar o galpão — a lista mostra cada mudança antes de confirmar.
+  async function acertarPeloHistorico() {
+    if (acertandoHistorico) return;
+    const lista = produtosOrdenados.filter(divergente);
+    const linhas = lista.map(
+      (p) => `${p.nome}: ${p.estoqueUn} → ${historico.get(p.id) ?? 0} un`,
+    );
+    if (!window.confirm(`Usar o número do histórico nestes produtos?\n\n${linhas.join("\n")}`)) return;
+    setAcertandoHistorico(true);
+    try {
+      for (const p of lista) {
+        await atualizarProduto(p.id, { estoqueUn: historico.get(p.id) ?? 0 });
+      }
+      setSoDivergentes(false);
+    } finally {
+      setAcertandoHistorico(false);
+    }
+  }
 
   const visiveis = useMemo(() => {
     const termo = normalizar(busca);
@@ -207,7 +231,7 @@ function EstoquePageInterno() {
               {qtdDivergentes} produto(s) com o estoque diferente do histórico
             </span>
             <span className="block text-xs text-texto-suave">
-              Conta no galpão e faz um Ajuste com a contagem.
+              Foi gravação perdida do sistema: o histórico é que está certo.
             </span>
           </span>
           <button
@@ -216,6 +240,14 @@ function EstoquePageInterno() {
             onClick={() => setSoDivergentes((v) => !v)}
           >
             {soDivergentes ? "Mostrar todos" : "Ver quais"}
+          </button>
+          <button
+            type="button"
+            className="btn-primario shrink-0 text-xs"
+            onClick={acertarPeloHistorico}
+            disabled={acertandoHistorico}
+          >
+            {acertandoHistorico ? "Acertando…" : "Acertar pelo histórico"}
           </button>
         </div>
       )}
@@ -538,8 +570,8 @@ function ModalHistorico({
         {somaHistorico !== produto.estoqueUn && (
           <p className="-mt-2 rounded-lg border border-ouro-300 bg-ouro-50 px-3 py-2 text-xs dark:bg-ouro-900/20">
             O histórico soma <strong>{somaHistorico} un</strong>, mas o estoque está em{" "}
-            <strong>{produto.estoqueUn} un</strong>. Conta no galpão e faz um Ajuste com a
-            contagem — ele acerta os dois.
+            <strong>{produto.estoqueUn} un</strong>. Use "Acertar pelo histórico" na tela do
+            Estoque, ou conte no galpão e faça um Ajuste.
           </p>
         )}
 
