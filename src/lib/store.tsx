@@ -131,13 +131,36 @@ function useColecaoProtegida<T extends { id: string }>(
   return itens;
 }
 
+/** Evento que o AvisoGravacao escuta pra avisar na tela. */
+export const EVENTO_AVISO_GRAVACAO = "aviso-gravacao";
+
+/**
+ * Muitas telas salvam sem tratar erro — se a gravação falhava (sem
+ * internet, sem permissão), parecia que tinha salvado. Aqui toda gravação
+ * avisa a tela quando falha ou quando passa de 8s sem confirmar (sem
+ * internet, o Firestore segura a gravação até a conexão voltar).
+ */
+async function comAviso<T>(gravacao: Promise<T>): Promise<T> {
+  const avisar = (tipo: "erro" | "lento") =>
+    window.dispatchEvent(new CustomEvent(EVENTO_AVISO_GRAVACAO, { detail: tipo }));
+  const lento = setTimeout(() => avisar("lento"), 8000);
+  try {
+    return await gravacao;
+  } catch (e) {
+    avisar("erro");
+    throw e;
+  } finally {
+    clearTimeout(lento);
+  }
+}
+
 const salvarEm =
   <T extends { id: string }>(nome: Parameters<typeof colecao>[0]) =>
   (item: T) =>
-    colecao<T>(nome).salvar(item);
+    comAviso(colecao<T>(nome).salvar(item));
 const removerDe =
   (nome: Parameters<typeof colecao>[0]) => (id: string) =>
-    colecao(nome).remover(id);
+    comAviso(colecao(nome).remover(id));
 
 /**
  * Funções de gravar/apagar criadas uma vez só, fora do Provider. Antes

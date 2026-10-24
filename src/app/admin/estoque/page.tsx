@@ -10,6 +10,7 @@ import { compararCategorias, estoqueNegativo, semCustoNoEstoque } from "@/lib/ca
 import {
   acertarPedidosDesatualizados,
   movimentosOrfaos,
+  somaDoHistorico,
   pedidosDesatualizados,
 } from "@/lib/estoque";
 import {
@@ -66,6 +67,7 @@ function EstoquePageInterno() {
 
   const [busca, setBusca] = useState("");
   const [soSemCusto, setSoSemCusto] = useState(false);
+  const [soDivergentes, setSoDivergentes] = useState(false);
   const [produtoHistorico, setProdutoHistorico] = useState<Produto | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
   const [limpandoOrfaos, setLimpandoOrfaos] = useState(false);
@@ -119,14 +121,22 @@ function EstoquePageInterno() {
 
   const produtosOrdenados = [...produtos].filter((p) => p.ativo);
 
+  // Produtos cujo estoque não bate com a soma do histórico (ver somaDoHistorico).
+  const historico = useMemo(() => somaDoHistorico(movimentos, orfaos), [movimentos, orfaos]);
+  const divergente = (p: Produto) => (historico.get(p.id) ?? 0) !== p.estoqueUn;
+  const qtdDivergentes = produtosOrdenados.filter(divergente).length;
+
   const visiveis = useMemo(() => {
     const termo = normalizar(busca);
     return produtosOrdenados.filter(
       (p) =>
         (!soSemCusto || semCustoNoEstoque(p)) &&
+        (!soDivergentes || divergente(p)) &&
         (!termo || normalizar(p.nome).includes(termo) || normalizar(p.categoria).includes(termo)),
     );
-  }, [produtosOrdenados, busca, soSemCusto]);
+    // divergente depende de historico, que já está nas dependências.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [produtosOrdenados, busca, soSemCusto, soDivergentes, historico]);
 
   // Valor do que está parado no galpão. Estoque negativo não conta (é erro
   // de lançamento, não mercadoria) e produto sem custo cadastrado entra como
@@ -186,6 +196,26 @@ function EstoquePageInterno() {
             disabled={limpandoOrfaos}
           >
             {limpandoOrfaos ? "Limpando…" : "Limpar agora"}
+          </button>
+        </div>
+      )}
+
+      {qtdDivergentes > 0 && (
+        <div className="mx-4 mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-ouro-300 bg-ouro-50 px-4 py-3 text-sm dark:bg-ouro-900/20 md:mx-6">
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold">
+              {qtdDivergentes} produto(s) com o estoque diferente do histórico
+            </span>
+            <span className="block text-xs text-texto-suave">
+              Conta no galpão e faz um Ajuste com a contagem.
+            </span>
+          </span>
+          <button
+            type="button"
+            className="btn-secundario shrink-0 text-xs"
+            onClick={() => setSoDivergentes((v) => !v)}
+          >
+            {soDivergentes ? "Mostrar todos" : "Ver quais"}
           </button>
         </div>
       )}
@@ -310,6 +340,11 @@ function EstoquePageInterno() {
                         >
                           <div className="min-w-0 flex-1">
                             <p className="truncate font-semibold">{p.nome}</p>
+                            {divergente(p) && (
+                              <span className="mt-0.5 mr-1 inline-block rounded-full bg-ouro-100 px-2 py-0.5 text-[10px] font-bold text-ouro-800 uppercase dark:bg-ouro-900/40 dark:text-ouro-300">
+                                conferir
+                              </span>
+                            )}
                             {permissoes.verCusto && semCustoNoEstoque(p) && (
                               <span className="mt-0.5 inline-block rounded-full bg-acento/15 px-2 py-0.5 text-[10px] font-bold text-acento uppercase">
                                 sem custo
@@ -357,6 +392,7 @@ function EstoquePageInterno() {
           // estoque antigo depois de editar uma compra aqui dentro.
           produto={produtoPorId(produtoHistorico.id) ?? produtoHistorico}
           movimentos={movimentos.filter((m) => m.produtoId === produtoHistorico.id)}
+          somaHistorico={historico.get(produtoHistorico.id) ?? 0}
           aoFechar={() => setProdutoHistorico(null)}
         />
       )}
@@ -384,10 +420,13 @@ interface LinhaHistorico {
 function ModalHistorico({
   produto,
   movimentos,
+  somaHistorico,
   aoFechar,
 }: {
   produto: Produto;
   movimentos: EstoqueMovimento[];
+  /** Soma de todo o histórico do produto (sem pedido excluído), pra conferir com o estoque. */
+  somaHistorico: number;
   aoFechar: () => void;
 }) {
   const { pedidoPorId, fornecedores, contasPagar } = useDados();
@@ -494,6 +533,13 @@ function ModalHistorico({
           <p className="-mt-2 text-xs text-red-600 dark:text-red-400">
             Negativo — venderam mais do que estava lançado. Faz um "Ajuste" pra
             corrigir com a contagem real do galpão.
+          </p>
+        )}
+        {somaHistorico !== produto.estoqueUn && (
+          <p className="-mt-2 rounded-lg border border-ouro-300 bg-ouro-50 px-3 py-2 text-xs dark:bg-ouro-900/20">
+            O histórico soma <strong>{somaHistorico} un</strong>, mas o estoque está em{" "}
+            <strong>{produto.estoqueUn} un</strong>. Conta no galpão e faz um Ajuste com a
+            contagem — ele acerta os dois.
           </p>
         )}
 

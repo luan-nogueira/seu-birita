@@ -209,7 +209,10 @@ function ProdutosPageInterno() {
       precoTabela2: form.precoTabela2 ? paraNumero(form.precoTabela2) : undefined,
       precoTabela3: form.precoTabela3 ? paraNumero(form.precoTabela3) : undefined,
       precoCusto: paraNumero(form.precoCusto),
-      estoqueUn: editando?.estoqueUn ?? 0,
+      // O estoque não é campo do formulário: pega o atual do banco, não o de
+      // quando o formulário abriu — senão uma compra ou pedido lançado com
+      // ele aberto voltava o estoque pro número antigo sem deixar rastro.
+      estoqueUn: (editando && produtos.find((p) => p.id === editando.id)?.estoqueUn) ?? editando?.estoqueUn ?? 0,
       estoqueMinimo: Math.max(0, Math.round(paraNumero(form.estoqueMinimo))),
       imagemUrl: form.imagemUrl.trim() || undefined,
       imagemCenario: form.imagemCenario,

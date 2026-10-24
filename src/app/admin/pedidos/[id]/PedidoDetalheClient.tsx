@@ -771,7 +771,21 @@ function BarraStatus({
           <TipoChip tipo={pedido.tipo} />
           <ArrowLeftRight className="h-3.5 w-3.5 text-texto-suave" />
         </button>
-        <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 md:mx-0 md:px-0">
+        {/* No celular a fileira de status não cabia e o Finalizado ficava
+            cortado — lá vira uma lista de escolha (seletor nativo). */}
+        <select
+          value={pedido.status}
+          onChange={(e) => escolher(e.target.value as PedidoStatus)}
+          aria-label="Status do pedido"
+          className="rounded-full bg-acento px-3 py-1.5 text-xs font-bold text-acento-texto md:hidden"
+        >
+          {STATUS_DISPONIVEIS.map((s) => (
+            <option key={s} value={s}>
+              {ROTULO_STATUS[s]}
+            </option>
+          ))}
+        </select>
+        <div className="hidden gap-1.5 md:flex">
           {STATUS_DISPONIVEIS.map((s) => {
             const bloqueado =
               s === "FINALIZADO" && pedido.status !== "FINALIZADO" && saldoAberto > 0.005;
@@ -1010,6 +1024,16 @@ function CartaoItem({
   const devolvido = devolvidoUn(item, tipo);
   const saldo = saldoUn(item, tipo);
   const excedeu = devolvido > entregue;
+  // Entrega zerada que não é a última vira uma linha só ("vazia"), pra o
+  // cartão não encher a tela de campos em branco. A última fica sempre
+  // aberta (é onde se lança a remessa nova); tocar na linha abre as outras.
+  const [abertas, setAbertas] = useState<Set<number>>(() => new Set());
+  const encolhida = (e: PedidoItem["entregas"][number], i: number) =>
+    item.entregas.length > 1 &&
+    i < item.entregas.length - 1 &&
+    !e.cx &&
+    !e.un &&
+    !abertas.has(e.numero);
 
   function mudarEntrega(indice: number, campo: "cx" | "un", valor: number): void;
   function mudarEntrega(indice: number, campo: "data", valor: string): void;
@@ -1055,7 +1079,27 @@ function CartaoItem({
             aoMudarUn={(v) => aoMudar({ sobraUn: v })}
           />
         )}
-        {item.entregas.map((e, i) => (
+        {item.entregas.map((e, i) =>
+          encolhida(e, i) ? (
+            <div key={i} className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setAbertas((a) => new Set(a).add(e.numero))}
+                className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1 py-1.5 text-left text-xs text-texto-suave transition hover:bg-superficie-2"
+              >
+                <span className="w-[76px] shrink-0 font-semibold uppercase">Entrega {e.numero}</span>
+                <span>vazia{e.data ? ` · ${dataBR(e.data)}` : ""}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => aoRemoverRemessa(e.numero)}
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-texto-suave transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                aria-label={`Apagar entrega ${e.numero}`}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
           <div key={i} className="space-y-1">
             <LinhaQtd
               rotulo={
@@ -1093,7 +1137,8 @@ function CartaoItem({
               </div>
             )}
           </div>
-        ))}
+          ),
+        )}
 
         {consignacao && (
           <LinhaQtd

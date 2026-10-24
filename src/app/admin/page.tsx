@@ -28,12 +28,21 @@ import {
   lucroTotal,
   lucroRecebidoTotal,
   pedidoContabilizado,
+  valorFinalItem,
 } from "@/lib/calc";
-import { brl, dataBR, hojeISO } from "@/lib/format";
+import { brl, dataBR, hojeISO, normalizar } from "@/lib/format";
 
 export default function InicioPage() {
-  const { pedidos, produtos, clientes, fornecedores, contasPagar, ehComodato, carregando } =
-    useDados();
+  const {
+    pedidos,
+    produtos,
+    clientes,
+    fornecedores,
+    contasPagar,
+    ehComodato,
+    produtoPorId,
+    carregando,
+  } = useDados();
   const { permissoes } = useAuth();
   const [agendarAberto, setAgendarAberto] = useState(false);
 
@@ -70,16 +79,23 @@ export default function InicioPage() {
     const t = calcularTotais(p, ehComodato);
     return soma + t.valorFinal - t.desconto;
   }, 0);
+  // Quanto faturou cada grupo, pela categoria do produto. Os grupos somam o
+  // consumo antes do desconto — o desconto aparece numa linha à parte pra
+  // conta fechar com o total.
+  const faturadoPorGrupo = new Map<GrupoFaturado, number>(GRUPOS_FATURADO.map((g) => [g, 0]));
+  let descontoMes = 0;
+  for (const p of pedidosDoMes) {
+    descontoMes += p.desconto || 0;
+    for (const item of p.itens) {
+      const grupo = grupoFaturado(produtoPorId(item.produtoId)?.categoria ?? "");
+      faturadoPorGrupo.set(grupo, faturadoPorGrupo.get(grupo)! + valorFinalItem(item, p.tipo));
+    }
+  }
 
-  // Comodato tem quadro próprio, com período separado do faturado — mesma
-  // regra de quais pedidos contam (Aguardando acerto e Finalizado).
-  const [comodatoDe, setComodatoDe] = useState(() => hojeISO().slice(0, 8) + "01");
-  const [comodatoAte, setComodatoAte] = useState(hojeISO);
+  // Comodato tem quadro próprio — mesmos pedidos e período do faturado.
   let comodatoPeriodo = 0;
   let comodatoUn = 0;
-  for (const p of contabilizados) {
-    const d = p.dataEvento.slice(0, 10);
-    if (d < comodatoDe || d > comodatoAte) continue;
+  for (const p of pedidosDoMes) {
     const t = calcularTotais(p, ehComodato);
     comodatoPeriodo += t.valorComodato;
     comodatoUn += t.unidadesComodatoEntregues - t.unidadesComodatoDevolvidas;
@@ -133,6 +149,18 @@ export default function InicioPage() {
       />
 
       <div className="space-y-6 px-4 md:px-6">
+        {/* --------------------------- Período --------------------------- */}
+        {(permissoes.financeiro || permissoes.pedidos) && (
+          <FiltroPeriodo
+            de={dataInicial}
+            ate={dataFinal}
+            aoMudar={(de, ate) => {
+              setDataInicial(de);
+              setDataFinal(ate);
+            }}
+          />
+        )}
+
         {/* --------------------------- Números --------------------------- */}
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
           {permissoes.financeiro && (
@@ -159,22 +187,24 @@ export default function InicioPage() {
                 Icone={TrendingUp}
                 rotulo="Faturado no período"
                 valor={brl(faturadoMes)}
+                // Largo pra caber o valor de cada grupo sem cortar.
+                classe="col-span-2"
                 detalhe={
-                  <div className="mt-1 flex flex-col gap-1">
-                    <input
-                      type="date"
-                      aria-label="Data inicial"
-                      value={dataInicial}
-                      onChange={(e) => setDataInicial(e.target.value)}
-                      className="campo h-auto min-h-0 px-1.5 py-1 text-[11px]"
-                    />
-                    <input
-                      type="date"
-                      aria-label="Data final"
-                      value={dataFinal}
-                      onChange={(e) => setDataFinal(e.target.value)}
-                      className="campo h-auto min-h-0 px-1.5 py-1 text-[11px]"
-                    />
+                  <div className="mt-1">
+                    <div className="space-y-0.5">
+                      {GRUPOS_FATURADO.filter((g) => faturadoPorGrupo.get(g)! > 0.005).map((g) => (
+                        <div key={g} className="flex justify-between gap-2">
+                          <span className="truncate">{g}</span>
+                          <span className="tabular-nums">{brl(faturadoPorGrupo.get(g)!)}</span>
+                        </div>
+                      ))}
+                      {descontoMes > 0.005 && (
+                        <div className="flex justify-between gap-2">
+                          <span>Desconto</span>
+                          <span className="tabular-nums">− {brl(descontoMes)}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 }
               />
@@ -194,25 +224,7 @@ export default function InicioPage() {
                 Icone={Armchair}
                 rotulo="Comodato no período"
                 valor={brl(comodatoPeriodo)}
-                detalhe={
-                  <div className="mt-1 flex flex-col gap-1">
-                    <span>{comodatoUn} un cobradas</span>
-                    <input
-                      type="date"
-                      aria-label="Data inicial do comodato"
-                      value={comodatoDe}
-                      onChange={(e) => setComodatoDe(e.target.value)}
-                      className="campo h-auto min-h-0 px-1.5 py-1 text-[11px]"
-                    />
-                    <input
-                      type="date"
-                      aria-label="Data final do comodato"
-                      value={comodatoAte}
-                      onChange={(e) => setComodatoAte(e.target.value)}
-                      className="campo h-auto min-h-0 px-1.5 py-1 text-[11px]"
-                    />
-                  </div>
-                }
+                detalhe={`${comodatoUn} un cobradas`}
               />
             </>
           )}
@@ -399,22 +411,117 @@ export default function InicioPage() {
   );
 }
 
+/** Primeiro e último dia do mês (1–12), em YYYY-MM-DD. */
+function mesInteiro(ano: number, mes: number): [string, string] {
+  const mm = String(mes).padStart(2, "0");
+  const ultimo = new Date(ano, mes, 0).getDate();
+  return [`${ano}-${mm}-01`, `${ano}-${mm}-${String(ultimo).padStart(2, "0")}`];
+}
+
+/**
+ * Um período só pra todos os quadros do Início (faturado, lucro, comodato,
+ * eventos) — antes cada quadro tinha o seu De/Até, que esticava os cartões
+ * e deixava olhar números de períodos diferentes sem perceber.
+ */
+function FiltroPeriodo({
+  de,
+  ate,
+  aoMudar,
+}: {
+  de: string;
+  ate: string;
+  aoMudar: (de: string, ate: string) => void;
+}) {
+  const hoje = hojeISO();
+  const ano = Number(hoje.slice(0, 4));
+  const mes = Number(hoje.slice(5, 7));
+  const atalhos: { rotulo: string; de: string; ate: string }[] = [
+    { rotulo: "Este mês", de: hoje.slice(0, 8) + "01", ate: hoje },
+    {
+      rotulo: "Mês passado",
+      ...(() => {
+        const [d, a] = mes === 1 ? mesInteiro(ano - 1, 12) : mesInteiro(ano, mes - 1);
+        return { de: d, ate: a };
+      })(),
+    },
+    { rotulo: "Este ano", de: `${ano}-01-01`, ate: hoje },
+  ];
+
+  return (
+    <div className="card space-y-2 px-3 py-2.5">
+      <div className="flex flex-wrap gap-1.5">
+        {atalhos.map((a) => (
+          <button
+            key={a.rotulo}
+            type="button"
+            onClick={() => aoMudar(a.de, a.ate)}
+            className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
+              de === a.de && ate === a.ate
+                ? "bg-acento text-acento-texto"
+                : "border border-borda bg-superficie text-texto-suave hover:bg-superficie-2"
+            }`}
+          >
+            {a.rotulo}
+          </button>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          type="date"
+          aria-label="Data inicial"
+          value={de}
+          onChange={(e) => aoMudar(e.target.value, ate)}
+          className="campo w-full min-w-0 px-2 py-1.5 text-xs"
+        />
+        <input
+          type="date"
+          aria-label="Data final"
+          value={ate}
+          onChange={(e) => aoMudar(de, e.target.value)}
+          className="campo w-full min-w-0 px-2 py-1.5 text-xs"
+        />
+      </div>
+    </div>
+  );
+}
+
+const GRUPOS_FATURADO = [
+  "Bebidas",
+  "Descartáveis",
+  "Gelo",
+  "Aluguel estrutura",
+  "Comodato",
+] as const;
+type GrupoFaturado = (typeof GRUPOS_FATURADO)[number];
+
+/** Grupo do quadro de faturado pela categoria — o que não é dos outros é bebida. */
+function grupoFaturado(categoria: string): GrupoFaturado {
+  const c = normalizar(categoria);
+  if (c.includes("comodato")) return "Comodato";
+  if (c.includes("estrutura")) return "Aluguel estrutura";
+  if (c.includes("gelo")) return "Gelo";
+  if (c.includes("descartave")) return "Descartáveis";
+  return "Bebidas";
+}
+
 function Cartao({
   Icone,
   rotulo,
   valor,
   detalhe,
   destaque = false,
+  classe = "",
 }: {
   Icone: ComponentType<{ className?: string }>;
   rotulo: string;
   valor: string;
   detalhe: ReactNode;
   destaque?: boolean;
+  classe?: string;
 }) {
   return (
     <div
-      className={`card px-4 py-3 ${destaque ? "border-acento/40 bg-acento/5" : ""}`}
+      className={`card px-4 py-3 ${destaque ? "border-acento/40 bg-acento/5" : ""} ${classe}`}
     >
       <div className="flex items-center gap-1.5 text-texto-suave">
         <Icone className="h-3.5 w-3.5" />

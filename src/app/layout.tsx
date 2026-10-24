@@ -8,6 +8,7 @@ import { AuthProvider } from "@/lib/auth";
 import { PwaRegistry } from "@/components/PwaRegistry";
 import { RecuperarErroDeChunk } from "@/components/RecuperarErroDeChunk";
 import { AvisoNovaVersao } from "@/components/AvisoNovaVersao";
+import { AvisoGravacao } from "@/components/AvisoGravacao";
 import Script from "next/script";
 
 const inter = Inter({
@@ -47,6 +48,7 @@ export default function RootLayout({
         <PwaRegistry />
         <RecuperarErroDeChunk />
         <AvisoNovaVersao />
+        <AvisoGravacao />
         <Script id="tema-script" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: SCRIPT_TEMA }} />
         <AuthProvider>
           <DadosProvider>

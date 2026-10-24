@@ -136,6 +136,27 @@ export function movimentosOrfaos(
   );
 }
 
+/**
+ * Quanto o histórico diz que cada produto tem: tudo que entrou menos o que
+ * saiu. Deveria bater com o estoqueUn — quando não bate, o número do estoque
+ * se perdeu em algum lançamento e só uma contagem do galpão (Ajuste) diz qual
+ * dos dois está certo. Lançamento de pedido excluído fica de fora: o estoque
+ * dele já foi devolvido na exclusão.
+ */
+export function somaDoHistorico(
+  movimentos: EstoqueMovimento[],
+  orfaos: EstoqueMovimento[],
+): Map<string, number> {
+  const idsOrfaos = new Set(orfaos.map((m) => m.id));
+  const mapa = new Map<string, number>();
+  for (const m of movimentos) {
+    if (idsOrfaos.has(m.id)) continue;
+    const q = m.tipo === "SAIDA" ? -m.quantidadeUn : m.quantidadeUn;
+    mapa.set(m.produtoId, (mapa.get(m.produtoId) ?? 0) + q);
+  }
+  return mapa;
+}
+
 /** Quando o controle de estoque começou — pedido sem lançamento antes disso é legado. */
 const INICIO_CONTROLE_ESTOQUE = "2026-09-15";
 
