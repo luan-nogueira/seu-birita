@@ -375,7 +375,8 @@ export function ModalNovoMovimento({
     produtos,
     fornecedores,
     salvarMovimento,
-    salvarProduto,
+    somarEstoque,
+    atualizarProduto,
     salvarFornecedor,
     salvarContaPagar,
     produtoPorId,
@@ -485,11 +486,8 @@ export function ModalNovoMovimento({
       });
     }
     if (contagem !== produto.estoqueUn) {
-      await salvarProduto({
-        ...produto,
-        estoqueUn: contagem,
-        atualizadoEm: new Date().toISOString(),
-      });
+      // Ajuste é a contagem do galpão: grava o número, não uma soma.
+      await atualizarProduto(produto.id, { estoqueUn: contagem });
     }
   }
 
@@ -585,12 +583,7 @@ export function ModalNovoMovimento({
 
       // Sem clamp em 0: negativo avisa que o lançado não bate com a
       // realidade, em vez de esconder o problema.
-      await salvarProduto({
-        ...produto,
-        estoqueUn: compra ? produto.estoqueUn + qtd : produto.estoqueUn - qtd,
-        precoCusto: novoPrecoCusto,
-        atualizadoEm: new Date().toISOString(),
-      });
+      await somarEstoque(produto.id, compra ? qtd : -qtd, { precoCusto: novoPrecoCusto });
 
       limparFormulario();
     } finally {
@@ -970,7 +963,8 @@ export function ModalEditarCompra({
     removerContaPagar,
     salvarMovimento,
     produtoPorId,
-    salvarProduto,
+    somarEstoque,
+    atualizarProduto,
     removerMovimento,
     movimentos,
   } = useDados();
@@ -1124,11 +1118,8 @@ export function ModalEditarCompra({
         const mudouCusto = numQtd !== movimento.quantidadeUn || numValorTotal !== valorTotalInicial;
         const precoCusto = mudouCusto ? custoMedioCorrigido(novoCustoUn) : undefined;
         if (numQtd !== movimento.quantidadeUn || precoCusto !== undefined) {
-          await salvarProduto({
-            ...produto,
-            estoqueUn: produto.estoqueUn + (numQtd - movimento.quantidadeUn),
+          await somarEstoque(produto.id, numQtd - movimento.quantidadeUn, {
             precoCusto: precoCusto ?? produto.precoCusto,
-            atualizadoEm: new Date().toISOString(),
           });
         }
       }
@@ -1159,11 +1150,7 @@ export function ModalEditarCompra({
                 const produto = produtoPorId(movimento.produtoId);
                 if (produto) {
                   const sinal = movimento.tipo === "SAIDA" ? 1 : -1;
-                  await salvarProduto({
-                    ...produto,
-                    estoqueUn: produto.estoqueUn + (movimento.quantidadeUn * sinal),
-                    atualizadoEm: new Date().toISOString()
-                  });
+                  await somarEstoque(produto.id, movimento.quantidadeUn * sinal);
                 }
                 if (!algumaPaga) {
                   for (const c of contas) {

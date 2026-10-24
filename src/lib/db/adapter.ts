@@ -10,6 +10,14 @@ export interface ColecaoAdapter<T extends ComId> {
   /** Escuta a coleção em tempo real. Devolve a função que cancela a escuta. */
   observar(callback: (itens: T[]) => void): () => void;
   salvar(item: T): Promise<void>;
+  /**
+   * Soma `delta` a um campo numérico direto no banco (e grava `extras`
+   * junto), sem partir do valor que a tela tem — duas gravações seguidas
+   * não apagam uma a outra.
+   */
+  somar(id: string, campo: string, delta: number, extras?: Record<string, unknown>): Promise<void>;
+  /** Grava só estes campos do documento (undefined apaga o campo). */
+  atualizar(id: string, campos: Record<string, unknown>): Promise<void>;
   remover(id: string): Promise<void>;
 }
 

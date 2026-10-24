@@ -91,6 +91,32 @@ export function criarAdaptadorLocal<T extends ComId>(
       escrever(colecao, itens);
     },
 
+    async somar(id, campo, delta, extras = {}) {
+      const itens = ler<T>(colecao);
+      const i = itens.findIndex((x) => x.id === id);
+      if (i < 0) return;
+      const atual = itens[i] as unknown as Record<string, unknown>;
+      itens[i] = {
+        ...atual,
+        ...extras,
+        [campo]: (Number(atual[campo]) || 0) + delta,
+      } as unknown as T;
+      escrever(colecao, itens);
+    },
+
+    async atualizar(id, campos) {
+      const itens = ler<T>(colecao);
+      const i = itens.findIndex((x) => x.id === id);
+      if (i < 0) return;
+      const novo: Record<string, unknown> = { ...(itens[i] as unknown as Record<string, unknown>) };
+      for (const [k, v] of Object.entries(campos)) {
+        if (v === undefined) delete novo[k];
+        else novo[k] = v;
+      }
+      itens[i] = novo as unknown as T;
+      escrever(colecao, itens);
+    },
+
     async remover(id) {
       const itens = ler<T>(colecao).filter((x) => x.id !== id);
       escrever(colecao, itens);

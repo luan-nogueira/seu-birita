@@ -58,7 +58,7 @@ function EstoquePageInterno() {
     movimentos,
     produtos,
     salvarMovimento,
-    salvarProduto,
+    somarEstoque,
     produtoPorId,
     pedidoPorId,
     pedidos,
@@ -111,7 +111,7 @@ function EstoquePageInterno() {
     try {
       await acertarPedidosDesatualizados(desatualizados, {
         produtoPorId,
-        salvarProduto,
+        somarEstoque,
         salvarMovimento,
       });
     } finally {

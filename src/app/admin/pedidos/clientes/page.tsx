@@ -86,7 +86,7 @@ function PedidosClientesPageInterno() {
     salvarCliente,
     produtoPorId,
     ehComodato,
-    salvarProduto,
+    somarEstoque,
     salvarMovimento,
     salvarPedido,
     proximoNumeroPedido,
@@ -160,7 +160,7 @@ function PedidosClientesPageInterno() {
       await salvarPedido(novoPedido);
       await aplicarAjusteEstoque(new Map(), efeitoEstoque(novoPedido), novoPedido.id, {
         produtoPorId,
-        salvarProduto,
+        somarEstoque,
         salvarMovimento,
       });
       await salvarPedidoCliente({ ...pc, status: "CONFIRMADO", atualizadoEm: agora });

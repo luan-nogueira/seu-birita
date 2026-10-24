@@ -1,9 +1,12 @@
 import {
   collection,
   deleteDoc,
+  deleteField,
   doc,
+  increment,
   onSnapshot,
   setDoc,
+  updateDoc,
 } from "firebase/firestore";
 import { getDb } from "../firebase";
 import type { ColecaoAdapter, ComId, NomeColecao } from "./adapter";
@@ -51,6 +54,21 @@ export function criarAdaptadorFirestore<T extends ComId>(
     async salvar(item) {
       const { id, ...resto } = item;
       await setDoc(doc(getDb(), colecao, id), semUndefined(resto));
+    },
+
+    async somar(id, campo, delta, extras = {}) {
+      await updateDoc(doc(getDb(), colecao, id), {
+        ...semUndefined(extras),
+        [campo]: increment(delta),
+      });
+    },
+
+    async atualizar(id, campos) {
+      const saida: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(campos)) {
+        saida[k] = v === undefined ? deleteField() : semUndefined(v);
+      }
+      await updateDoc(doc(getDb(), colecao, id), saida);
     },
 
     async remover(id) {

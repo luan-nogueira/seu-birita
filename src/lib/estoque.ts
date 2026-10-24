@@ -5,7 +5,7 @@ import type { EstoqueMovimento, Pedido, Produto } from "./types";
 
 interface DepsEstoque {
   produtoPorId: (id: string) => Produto | undefined;
-  salvarProduto: (p: Produto) => Promise<void>;
+  somarEstoque: (produtoId: string, delta: number) => Promise<void>;
   salvarMovimento: (m: EstoqueMovimento) => Promise<void>;
 }
 
@@ -18,7 +18,7 @@ export async function aplicarAjusteEstoque(
   efeitoAntes: Map<string, number>,
   efeitoDepois: Map<string, number>,
   pedidoId: string,
-  { produtoPorId, salvarProduto, salvarMovimento }: DepsEstoque,
+  { produtoPorId, somarEstoque, salvarMovimento }: DepsEstoque,
 ) {
   const produtoIds = new Set([...efeitoAntes.keys(), ...efeitoDepois.keys()]);
   for (const produtoId of produtoIds) {
@@ -45,20 +45,16 @@ export async function aplicarAjusteEstoque(
       criadoEm: new Date().toISOString(),
     };
     await salvarMovimento(movimento);
-    await salvarProduto({
-      ...produto,
-      // Sem clamp em 0: se vender mais do que tinha lançado, o negativo
-      // avisa que o estoque real está errado (faltou lançar uma compra,
-      // por exemplo) em vez de esconder o problema.
-      estoqueUn: produto.estoqueUn - delta,
-      atualizadoEm: new Date().toISOString(),
-    });
+    // Sem clamp em 0: se vender mais do que tinha lançado, o negativo
+    // avisa que o estoque real está errado (faltou lançar uma compra,
+    // por exemplo) em vez de esconder o problema.
+    await somarEstoque(produtoId, -delta);
   }
 }
 
 interface DepsReverter {
   produtoPorId: (id: string) => Produto | undefined;
-  salvarProduto: (p: Produto) => Promise<void>;
+  somarEstoque: (produtoId: string, delta: number) => Promise<void>;
   movimentos: EstoqueMovimento[];
   removerMovimento: (id: string) => Promise<void>;
 }
@@ -72,18 +68,12 @@ interface DepsReverter {
 export async function reverterEstoquePedido(
   efeito: Map<string, number>,
   pedidoId: string,
-  { produtoPorId, salvarProduto, movimentos, removerMovimento }: DepsReverter,
+  { produtoPorId, somarEstoque, movimentos, removerMovimento }: DepsReverter,
 ) {
   for (const [produtoId, antes] of efeito) {
     if (antes === 0) continue;
-    const produto = produtoPorId(produtoId);
-    if (!produto) continue;
-
-    await salvarProduto({
-      ...produto,
-      estoqueUn: produto.estoqueUn + antes,
-      atualizadoEm: new Date().toISOString(),
-    });
+    if (!produtoPorId(produtoId)) continue;
+    await somarEstoque(produtoId, antes);
   }
 
   const doPedido = movimentos.filter((m) => m.referenciaId === pedidoId);
@@ -221,7 +211,7 @@ export function pedidosDesatualizados(
  */
 export async function acertarPedidosDesatualizados(
   lista: PedidoDesatualizado[],
-  { produtoPorId, salvarProduto, salvarMovimento }: DepsEstoque,
+  { produtoPorId, somarEstoque, salvarMovimento }: DepsEstoque,
 ) {
   const totalPorProduto = new Map<string, number>();
   for (const { pedido, deltas } of lista) {
@@ -244,12 +234,7 @@ export async function acertarPedidosDesatualizados(
     }
   }
   for (const [produtoId, delta] of totalPorProduto) {
-    const produto = produtoPorId(produtoId);
-    if (!produto || delta === 0) continue;
-    await salvarProduto({
-      ...produto,
-      estoqueUn: produto.estoqueUn - delta,
-      atualizadoEm: new Date().toISOString(),
-    });
+    if (!produtoPorId(produtoId) || delta === 0) continue;
+    await somarEstoque(produtoId, -delta);
   }
 }

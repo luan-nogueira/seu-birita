@@ -995,7 +995,7 @@ function ModalCategorias({
   aberto: boolean;
   aoFechar: () => void;
 }) {
-  const { produtos, salvarProduto } = useDados();
+  const { produtos, atualizarProduto } = useDados();
   const [salvando, setSalvando] = useState(false);
 
   const categorias = useMemo(() => {
@@ -1010,7 +1010,7 @@ function ModalCategorias({
     setSalvando(true);
     const afetados = produtos.filter((p) => p.categoria === velha);
     for (const p of afetados) {
-      await salvarProduto({ ...p, categoria: nova.trim() });
+      await atualizarProduto(p.id, { categoria: nova.trim() });
     }
     setSalvando(false);
   }
@@ -1021,10 +1021,7 @@ function ModalCategorias({
     try {
       const produtosAfetados = produtos.filter(p => p.categoria === categoriaParaExcluir);
       for (const p of produtosAfetados) {
-        await salvarProduto({
-          ...p,
-          categoria: "",
-        });
+        await atualizarProduto(p.id, { categoria: "" });
       }
     } finally {
       setSalvando(false);

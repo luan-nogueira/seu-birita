@@ -39,6 +39,8 @@ interface Dados {
   modoDemonstracao: boolean;
 
   salvarProduto: (p: Produto) => Promise<void>;
+  somarEstoque: (produtoId: string, delta: number, extras?: Partial<Produto>) => Promise<void>;
+  atualizarProduto: (produtoId: string, campos: Partial<Produto>) => Promise<void>;
   removerProduto: (id: string) => Promise<void>;
   salvarCliente: (c: Cliente) => Promise<void>;
   removerCliente: (id: string) => Promise<void>;
@@ -172,6 +174,28 @@ const removerDe =
  */
 const ACOES = {
   salvarProduto: salvarEm<Produto>("produtos"),
+  /**
+   * Soma (ou tira, com delta negativo) do estoque direto no banco. Gravar
+   * `{...produto, estoqueUn: produto.estoqueUn - x}` partia do número que a
+   * tela tinha: duas gravações seguidas (o salvamento automático do pedido
+   * enquanto se digita) partiam do mesmo número e uma apagava a outra — o
+   * lançamento ficava no histórico, mas o estoque não.
+   */
+  somarEstoque: (produtoId: string, delta: number, extras: Partial<Produto> = {}) =>
+    comAviso(
+      colecao<Produto>("produtos").somar(produtoId, "estoqueUn", delta, {
+        ...extras,
+        atualizadoEm: new Date().toISOString(),
+      }),
+    ),
+  /** Grava só estes campos do produto, sem mexer no resto (estoque incluído). */
+  atualizarProduto: (produtoId: string, campos: Partial<Produto>) =>
+    comAviso(
+      colecao<Produto>("produtos").atualizar(produtoId, {
+        ...campos,
+        atualizadoEm: new Date().toISOString(),
+      }),
+    ),
   removerProduto: removerDe("produtos"),
   salvarCliente: salvarEm<Cliente>("clientes"),
   removerCliente: removerDe("clientes"),

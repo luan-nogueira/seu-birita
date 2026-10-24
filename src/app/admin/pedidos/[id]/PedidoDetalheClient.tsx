@@ -110,7 +110,7 @@ function PedidoPageInterno() {
     removerPagamento,
     produtoPorId,
     ehComodato,
-    salvarProduto,
+    somarEstoque,
     salvarMovimento,
     movimentos,
     removerMovimento,
@@ -145,13 +145,14 @@ function PedidoPageInterno() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remoto, carregando]);
 
-  const deps = { produtoPorId, salvarProduto, salvarMovimento };
+  const deps = { produtoPorId, somarEstoque, salvarMovimento };
 
   // Salvamento automático com uma pausa, pra não gravar a cada tecla.
   // Só grava se o conteúdo mudou de verdade desde a última gravação — sem
   // isso, qualquer re-render que recriasse o objeto do pedido virava uma
   // gravação, e cada gravação volta pra todos os aparelhos pelo Firestore.
   const ultimoConteudoSalvo = useRef<string | null>(null);
+  const filaSalvamento = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
     if (!pedido) return;
     const conteudo = JSON.stringify({
@@ -170,26 +171,36 @@ function PedidoPageInterno() {
       return;
     }
     setSalvando(true);
-    const t = setTimeout(async () => {
+    const t = setTimeout(() => {
       ultimoConteudoSalvo.current = conteudo;
-      const totais = calcularTotais(pedido, ehComodato);
-      await salvarPedido({
-        ...pedido,
-        valorPedido: totais.valorPedido,
-        valorFinal: totais.valorFinal,
-        atualizadoEm: new Date().toISOString(),
-      });
+      // Um salvamento espera o anterior terminar. Antes, com o pedido grande
+      // (muitos itens = muitas gravações), o próximo começava no meio do
+      // anterior, ainda com a "foto" velha do que já tinha saído do
+      // estoque, e lançava a mesma saída de novo.
+      filaSalvamento.current = filaSalvamento.current
+        .then(async () => {
+          const totais = calcularTotais(pedido, ehComodato);
+          await salvarPedido({
+            ...pedido,
+            valorPedido: totais.valorPedido,
+            valorFinal: totais.valorFinal,
+            atualizadoEm: new Date().toISOString(),
+          });
 
-      const efeitoNovo = efeitoEstoque(pedido);
-      await aplicarAjusteEstoque(
-        ultimoEstoqueAplicado.current ?? new Map(),
-        efeitoNovo,
-        pedido.id,
-        deps,
-      );
-      ultimoEstoqueAplicado.current = efeitoNovo;
-
-      setSalvando(false);
+          const efeitoNovo = efeitoEstoque(pedido);
+          await aplicarAjusteEstoque(
+            ultimoEstoqueAplicado.current ?? new Map(),
+            efeitoNovo,
+            pedido.id,
+            deps,
+          );
+          ultimoEstoqueAplicado.current = efeitoNovo;
+        })
+        // O erro já aparece na tela (AvisoGravacao); a fila segue.
+        .catch(() => {})
+        .finally(() => {
+          if (ultimoConteudoSalvo.current === conteudo) setSalvando(false);
+        });
     }, 700);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -333,7 +344,7 @@ function PedidoPageInterno() {
     await reverterEstoquePedido(
       ultimoEstoqueAplicado.current ?? efeitoEstoque(pedido!),
       pedido!.id,
-      { produtoPorId, salvarProduto, movimentos, removerMovimento },
+      { produtoPorId, somarEstoque, movimentos, removerMovimento },
     );
 
     await removerPedido(pedido!.id);
