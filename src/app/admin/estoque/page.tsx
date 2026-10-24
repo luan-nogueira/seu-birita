@@ -128,6 +128,27 @@ function EstoquePageInterno() {
   const qtdDivergentes = produtosOrdenados.filter(divergente).length;
   const [acertandoHistorico, setAcertandoHistorico] = useState(false);
 
+  /**
+   * Pista de onde veio a diferença: lançamentos do produto com exatamente a
+   * quantidade que falta — a gravação perdida foi a do estoque de um deles.
+   * Ex.: Heineken com 564 un de diferença → "Pedido #045 Multishow".
+   */
+  function suspeitos(p: Produto): string[] {
+    const diferenca = Math.abs((historico.get(p.id) ?? 0) - p.estoqueUn);
+    if (diferenca === 0) return [];
+    const nomes = new Set<string>();
+    for (const m of movimentos) {
+      if (m.produtoId !== p.id || m.quantidadeUn !== diferenca) continue;
+      const pedido = m.referenciaId ? pedidoPorId(m.referenciaId) : undefined;
+      nomes.add(
+        pedido
+          ? `Pedido #${String(pedido.numero).padStart(3, "0")} ${pedido.clienteNome}`
+          : `${ROTULO_ORIGEM[m.origem]} de ${dataBR(m.data)}`,
+      );
+    }
+    return [...nomes];
+  }
+
   // Nos furos que apareceram (gravação do estoque perdida, compra editada
   // na versão antiga) o histórico é que estava certo: o lançamento gravou,
   // o número do estoque não. Então dá pra acertar o estoque pelo histórico
@@ -136,7 +157,12 @@ function EstoquePageInterno() {
     if (acertandoHistorico) return;
     const lista = produtosOrdenados.filter(divergente);
     const linhas = lista.map(
-      (p) => `${p.nome}: ${p.estoqueUn} → ${historico.get(p.id) ?? 0} un`,
+      (p) => {
+        const pista = suspeitos(p);
+        return `${p.nome}: ${p.estoqueUn} → ${historico.get(p.id) ?? 0} un${
+          pista.length ? ` (${pista.join(", ")})` : ""
+        }`;
+      },
     );
     if (!window.confirm(`Usar o número do histórico nestes produtos?\n\n${linhas.join("\n")}`)) return;
     setAcertandoHistorico(true);
@@ -425,6 +451,7 @@ function EstoquePageInterno() {
           produto={produtoPorId(produtoHistorico.id) ?? produtoHistorico}
           movimentos={movimentos.filter((m) => m.produtoId === produtoHistorico.id)}
           somaHistorico={historico.get(produtoHistorico.id) ?? 0}
+          suspeitos={suspeitos(produtoPorId(produtoHistorico.id) ?? produtoHistorico)}
           aoFechar={() => setProdutoHistorico(null)}
         />
       )}
@@ -453,12 +480,15 @@ function ModalHistorico({
   produto,
   movimentos,
   somaHistorico,
+  suspeitos,
   aoFechar,
 }: {
   produto: Produto;
   movimentos: EstoqueMovimento[];
   /** Soma de todo o histórico do produto (sem pedido excluído), pra conferir com o estoque. */
   somaHistorico: number;
+  /** Lançamentos com a quantidade exata da diferença (ver suspeitos). */
+  suspeitos: string[];
   aoFechar: () => void;
 }) {
   const { pedidoPorId, fornecedores, contasPagar } = useDados();
@@ -572,6 +602,12 @@ function ModalHistorico({
             O histórico soma <strong>{somaHistorico} un</strong>, mas o estoque está em{" "}
             <strong>{produto.estoqueUn} un</strong>. Use "Acertar pelo histórico" na tela do
             Estoque, ou conte no galpão e faça um Ajuste.
+            {suspeitos.length > 0 && (
+              <>
+                {" "}A diferença ({Math.abs(somaHistorico - produto.estoqueUn)} un) bate com:{" "}
+                <strong>{suspeitos.join(", ")}</strong>.
+              </>
+            )}
           </p>
         )}
 
