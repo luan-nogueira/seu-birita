@@ -5,7 +5,6 @@ import { useState, type ReactNode, type ComponentType } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
-  Armchair,
   ArrowRight,
   CalendarDays,
   ClipboardList,
@@ -92,14 +91,6 @@ export default function InicioPage() {
     }
   }
 
-  // Comodato tem quadro próprio — mesmos pedidos e período do faturado.
-  let comodatoPeriodo = 0;
-  let comodatoUn = 0;
-  for (const p of pedidosDoMes) {
-    const t = calcularTotais(p, ehComodato);
-    comodatoPeriodo += t.valorComodato;
-    comodatoUn += t.unidadesComodatoEntregues - t.unidadesComodatoDevolvidas;
-  }
   // Lucro proporcional ao que já foi pago — um pedido com pagamento parcial
   // não deve mostrar o lucro do evento inteiro, só o que já entrou.
   const lucroRecebidoMes = lucroRecebidoTotal(pedidosDoMes, ehComodato);
@@ -219,12 +210,6 @@ export default function InicioPage() {
                       ? "tudo recebido"
                       : "sem faturamento"
                 }
-              />
-              <Cartao
-                Icone={Armchair}
-                rotulo="Comodato no período"
-                valor={brl(comodatoPeriodo)}
-                detalhe={`${comodatoUn} un cobradas`}
               />
             </>
           )}
@@ -419,7 +404,7 @@ function mesInteiro(ano: number, mes: number): [string, string] {
 }
 
 /**
- * Um período só pra todos os quadros do Início (faturado, lucro, comodato,
+ * Um período só pra todos os quadros do Início (faturado, lucro,
  * eventos) — antes cada quadro tinha o seu De/Até, que esticava os cartões
  * e deixava olhar números de períodos diferentes sem perceber.
  */
