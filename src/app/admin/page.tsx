@@ -63,7 +63,7 @@ export default function InicioPage() {
   );
   // Faturado = o que foi cobrado do cliente, já com o desconto (a pendência
   // anterior não entra: é dívida de outro pedido, já faturada lá). O
-  // comodato/estrutura entra no faturado, mas aparece separado porque fica
+  // comodato entra no faturado, mas aparece separado porque fica
   // fora do lucro.
   let faturadoMes = 0;
   let comodatoMes = 0;

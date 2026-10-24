@@ -86,9 +86,9 @@ export interface TotaisPedido {
   valorPedido: number;
   /** Total cobrado do cliente (mercadoria + comodato). */
   valorFinal: number;
-  /** Parte do valorPedido que é comodato/estrutura. */
+  /** Parte do valorPedido que é comodato. */
   valorPedidoComodato: number;
-  /** Parte do valorFinal que é comodato/estrutura — cobrada, mas fora do lucro. */
+  /** Parte do valorFinal que é comodato — cobrada, mas fora do lucro. */
   valorComodato: number;
   unidadesComodatoEntregues: number;
   unidadesComodatoDevolvidas: number;
@@ -103,25 +103,27 @@ export interface TotaisPedido {
   unidadesEntregues: number;
   unidadesDevolvidas: number;
   unidadesConsumidas: number;
-  /** Custo da mercadoria consumida (sem comodato/estrutura). */
+  /** Custo da mercadoria consumida (sem comodato). */
   custoTotal: number;
   /** valorFinal - valorComodato - desconto - custoTotal */
   lucro: number;
 }
 
-/** Diz se um item do pedido é comodato/estrutura (ver comodatoPorCategoria). */
+/** Diz se um item do pedido é comodato (ver comodatoPorCategoria). */
 export type EhComodato = (item: PedidoItem) => boolean;
 
 /**
- * Comodato e estrutura (bags, bistrôs, caixa térmica…) são aluguel de
- * equipamento, não revenda: o cliente paga normalmente, mas o valor aparece
- * separado da mercadoria e fica fora do lucro (custo zero inflava a margem).
+ * Comodato (bags, bistrôs, caixa térmica… emprestados com a bebida): o
+ * cliente paga normalmente, mas o valor aparece separado da mercadoria e
+ * fica fora do lucro. Estrutura não: é aluguel, então entra no lucro como
+ * mercadoria comum (custo zero) — decisão do Luifer em 23/10.
  * A categoria vem do cadastro do produto, que o item não guarda.
  */
 export function comodatoPorCategoria(
   produtoPorId: (id: string) => Produto | undefined,
 ): EhComodato {
-  return (item) => categoriaComodato(produtoPorId(item.produtoId)?.categoria ?? "");
+  return (item) =>
+    normalizar(produtoPorId(item.produtoId)?.categoria ?? "").includes("comodato");
 }
 
 export function calcularTotais(pedido: Pedido, ehComodato: EhComodato): TotaisPedido {
@@ -300,7 +302,7 @@ const ORDEM_FIM = ["gelo", "descartaveis", "estrutura", "comodato", "estrutura e
 /**
  * Comodato e estrutura (bags, bistrôs, caixa térmica…) vão e voltam dos
  * eventos e não são mercadoria vendida — ficam fora do aviso de estoque
- * negativo e do lucro do pedido.
+ * negativo. (No lucro só o comodato fica de fora — ver comodatoPorCategoria.)
  */
 export function categoriaComodato(categoria: string): boolean {
   const c = normalizar(categoria || "");
