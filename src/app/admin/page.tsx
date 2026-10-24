@@ -61,10 +61,17 @@ export default function InicioPage() {
   const eventosDoMes = ativos.filter(
     (p) => p.status !== "RASCUNHO" && p.status !== "ESTOCADO" && noPeriodo(p),
   );
-  const faturadoMes = pedidosDoMes.reduce(
-    (soma, p) => soma + calcularTotais(p, ehComodato).valorFinal,
-    0,
-  );
+  // Faturado = o que foi cobrado do cliente, já com o desconto (a pendência
+  // anterior não entra: é dívida de outro pedido, já faturada lá). O
+  // comodato/estrutura entra no faturado, mas aparece separado porque fica
+  // fora do lucro.
+  let faturadoMes = 0;
+  let comodatoMes = 0;
+  for (const p of pedidosDoMes) {
+    const t = calcularTotais(p, ehComodato);
+    faturadoMes += t.valorFinal - t.desconto;
+    comodatoMes += t.valorComodato;
+  }
   // Lucro proporcional ao que já foi pago — um pedido com pagamento parcial
   // não deve mostrar o lucro do evento inteiro, só o que já entrou.
   const lucroRecebidoMes = lucroRecebidoTotal(pedidosDoMes, ehComodato);
@@ -142,6 +149,11 @@ export default function InicioPage() {
                 valor={brl(faturadoMes)}
                 detalhe={
                   <div className="mt-1 flex flex-col gap-1">
+                    {comodatoMes > 0.005 && (
+                      <span>
+                        {brl(faturadoMes - comodatoMes)} mercadoria · {brl(comodatoMes)} comodato
+                      </span>
+                    )}
                     <input
                       type="date"
                       aria-label="Data inicial"
